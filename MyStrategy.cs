@@ -54,20 +54,9 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             }
 
             // DebugMap(self, world);
-            MyWay way = FindWay();
+            MyWay way = FindWay(self.X,self.Y, self.NextWaypointX, self.NextWaypointY);
             double nextWaypointX = way.GetCenterX(game.TrackTileSize);
             double nextWaypointY = way.GetCenterY(game.TrackTileSize);
-            Console.WriteLine("-------");
-            Console.Write(TransformX(nextWaypointX));
-            Console.Write(" ");
-            Console.WriteLine(self.NextWaypointX);
-
-            Console.Write(TransformY(nextWaypointY));
-            Console.Write(" ");
-            Console.WriteLine(self.NextWaypointY);
-            Console.WriteLine(self.NextWaypointIndex);
-            Console.WriteLine("-------");
-            //CorrectCenterPoint(self, world, game, ref nextWaypointX, ref nextWaypointY);
 
             double angleToWaypoint = self.GetAngleTo(nextWaypointX, nextWaypointY);
             Console.WriteLine(angleToWaypoint);
@@ -152,48 +141,54 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             Console.WriteLine("-------");
         }
 
-        MyWay FindWay()
+        MyWay FindWay(double px,double py, int wx, int wy)
         {
             CopyMap();
-            int x = TransformX(self.X);// / game.TrackTileSize);
-            int y = TransformY(self.Y);// / game.TrackTileSize);
+            int x = TransformX(px);
+            int y = TransformY(py);
             myMap[x][y].lenCount = 1;// startpoint
-            int wx = self.NextWaypointX;
-            int wy = self.NextWaypointY;
             int lenCount = FillShortWay(wx, wy);
-            //List<MyWay> myWay = new List<MyWay>();
             if (lenCount <= 2) return new MyWay(wx, wy);
             MyWay[] myWay = new MyWay[lenCount];
             myWay[lenCount - 1] = new MyWay(wx, wy);
-            if (isAnyWallAtLine(self.X, self.Y, myWay[lenCount - 1], lenCount)) {
-                Console.WriteLine("-");
+            if (isNoWallAtLine(px, py, myWay[lenCount - 1], lenCount)) {
                 return myWay[lenCount - 1]; }
+
             for (int i = lenCount-1; i >= 1; i--) {
                 double accelerate = (lenCount - i) * (1.0D / lenCount);
                 myWay[i-1] = FindAround(i, myWay );
                 myWay[i - 1].Acelerate = accelerate;
-                if (isAnyWallAtLine(self.X, self.Y, myWay[i - 1], i))return myWay[i - 1];
+                if (isNoWallAtLine(px, py, myWay[i - 1], i))return myWay[i - 1];
             }
 
-            return myWay[1];
+             return myWay[1];
         }
 
-        int TransformX(double x) { return (int)(x / game.TrackTileSize); }
-        int TransformY(double y) { return (int)(y / game.TrackTileSize); }
+ 
 
-        bool isAnyWallAtLine(double x, double y, MyWay myWay, int lenCount) {
-            double x2 = myWay.GetCenterX(game.TrackTileSize);
-            double y2 = myWay.GetCenterX(game.TrackTileSize);
-            double dx = x2 - x;
-            double dy = y2 - y;
+        bool isNoWallAtLine(double x0, double y0, MyWay myWay, int lenCount) {
+            double x1 = myWay.GetCenterX(game.TrackTileSize);
+            double y1 = myWay.GetCenterY(game.TrackTileSize);
+            double x = x0, y = y0;
+            double dx = x1 - x0;
+            double dy = y1 - y0;
+
             double d;
             int i=0, l;
 
-            while (true) { 
-            if (Math.Abs(dx) > Math.Abs(dy)) { l = (int)Math.Abs(dx); d = dx == 0 ? 0 : dy / Math.Abs(dx); x += 1.0D; y += d; } else { l = (int)Math.Abs(dy); d = dy == 0 ? 0 : dx / Math.Abs(dy); y += 1.0D; x += d; }
-            if (++i >= l) break;
+            while (true) {
+            if (Math.Abs(dx) > Math.Abs(dy)) {
+                    l = (int)Math.Abs(dx);
+                    y = y0 + (x - x0) * (dy) / (dx);
+                    x += dx > 0 ? 1.0D : -1.0D; 
+                } else {
+                    l = (int)Math.Abs(dy);
+                    x = x0 + (y - y0) * (dx) / (dy);
+                    y += dy > 0 ? 1.0D : -1.0D;
+                }
+                if (++i >= l) break;
                 int w = WaveAt(TransformX(x), TransformY(y));
-                if (w == 0 || w > lenCount) return false;
+                if (w == 0 || w > lenCount)  return false; 
         }
             return true;
 
@@ -363,7 +358,13 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             this.game = game;
         }
 
+
         double Hypot(double x, double y) { return Math.Sqrt(x * x + y * y); }
+        int TransformX(double x) { return (int)( (x ) / game.TrackTileSize); }
+        int TransformY(double y) { return (int)( (y ) / game.TrackTileSize); }
+        double InvTransoftmX(int x) { return (double)(x) * game.TrackTileSize; }
+        double InvTransoftmY(int x) { return (double)(x) * game.TrackTileSize; }
+
 
         class MyWay
         {
