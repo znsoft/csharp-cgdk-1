@@ -6,12 +6,12 @@ using System.Collections.Generic;
 
 namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
     public sealed class MyStrategy : IStrategy {
-        const int MAXSTOPCOUNT = 20;
-        const double MINSPEED = 0.08D;
-        const int MAXBACKTICKS = 80;
+        const int MAXSTOPCOUNT = 30;
+        const double MINSPEED = 0.09D;
+        const int MAXBACKTICKS = 90;
         const int MAXWAYITERATIONS = 100;
-
-
+        const double PRETURNSPEEDMUL = 15.5D;
+        const double CORNERCORRECTION = -0.25D;
         enum MovingState
         {
             FORWARD,
@@ -45,51 +45,119 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             AnalyzeCurrentSpeedAndState();
             //if (world.Tick < game.InitialFreezeDurationTicks) FindWays();
 
-            move.IsThrowProjectile = true;
-            move.IsSpillOil = true;
-
-            if (world.Tick > game.InitialFreezeDurationTicks)
+            if (world.Tick == game.InitialFreezeDurationTicks)
             {
-               // move.IsUseNitro = true;
+                move.IsUseNitro = true;
             }
 
             // DebugMap(self, world);
             MyWay way = FindWay(self.X,self.Y, self.NextWaypointX, self.NextWaypointY);
             double nextWaypointX = way.GetCenterX(game.TrackTileSize);
             double nextWaypointY = way.GetCenterY(game.TrackTileSize);
-
-            double angleToWaypoint = self.GetAngleTo(nextWaypointX, nextWaypointY);
-            Console.WriteLine(angleToWaypoint);
-
-
-            move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
-            move.EnginePower = (0.95D);
-
-            if (speedModule * speedModule * Math.Abs(angleToWaypoint) > 2.5D * 2.5D * Math.PI)
+            double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
+            move.EnginePower = 1.0D;// (0.95D);
+            if (distance < (game.TrackTileSize+speedModule*PRETURNSPEEDMUL))//800*1250*32/
             {
-                move.IsBrake = true;
+                int nextWayPointIndex = (self.NextWaypointIndex + 1) % world.Waypoints.Length;
+                 way = FindWay(self.X, self.Y, world.Waypoints[nextWayPointIndex][0], world.Waypoints[nextWayPointIndex][1]);
+                 nextWaypointX = way.GetCenterX(game.TrackTileSize);
+                 nextWaypointY = way.GetCenterY(game.TrackTileSize);
+                move.IsSpillOil = true;
+            }
+
+            CorrectCenterPoint(ref nextWaypointX, ref nextWaypointY);
+
+            if (distance < game.TrackTileSize * speedModule)//800*1250*32/
+            {
+                move.EnginePower = 15.0D / speedModule;
+            }
+            if (distance > game.TrackTileSize * 10)//800*1250*32/
+            {
+                move.IsUseNitro = true;
+            }
+            double angleToWaypoint = self.GetAngleTo(nextWaypointX, nextWaypointY);
+            Console.WriteLine((Math.Cos(self.Angle)* speedModule).ToString()+" "+ (Math.Sin(self.Angle) * speedModule).ToString()+" "+self.SpeedX.ToString()+" "+self.SpeedY.ToString());
+           // CorrectAngleFromWallsEdges(move, ref angleToWaypoint);
+           // if(!IsBackSpeed(speedModule))//IsBackSpeed(speedModule) ? -1.0D : 1.0 * 
+            move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
+           
+
+            if (speedModule * speedModule * Math.Abs(angleToWaypoint) > 5.5D * 2.5D * Math.PI)
+            {
+               // move.IsBrake = true;
                 //move.IsUseNitro = true;
             }
 
             if (currentState == MovingState.BACKWARD)
             {
                 move.EnginePower = -1;
-                move.IsUseNitro = true;
+                //move.IsUseNitro = true;
                 move.IsBrake = false;
                 move.WheelTurn = -move.WheelTurn;
             }
 
 
-
+            FireinEnemy(move);
 
 
         }
 
-        private static void CorrectCenterPoint(Car self, World world, Game game, ref double nextWaypointX, ref double nextWaypointY)
+        private bool IsNearWallsEdges()
         {
-            double cornerTileOffset = 0.25D * game.TrackTileSize;
+            return false;
+            double fx = self.SpeedX * 10.0D;
+            double fy = self.SpeedY * 10.0D;
 
-            switch (world.TilesXY[self.NextWaypointX][self.NextWaypointY])
+            int myX = Transform(self.X);
+            int myY = Transform(self.Y);
+            double cellX = self.X - DTransoform0(myX);
+            double cellY = self.Y - DTransoform0(myY);
+            double p = game.TrackTileSize / 55;// + game.CarWidth / 2;
+            if (OnMyLine(cellX, cellY, 0, 0, fx, fy, p) ||
+                            OnMyLine(cellX, cellY, game.TrackTileSize, 0, fx, fy, p) ||
+                            OnMyLine(cellX, cellY, 0, game.TrackTileSize, fx, fy, p) ||
+                            OnMyLine(cellX, cellY, game.TrackTileSize, game.TrackTileSize, fx, fy, p))
+            {  return true; }
+            return false;
+                
+        }
+
+
+        private bool OnMyLine(double px,double py, double x1, double y1, double ex, double ey, double p)
+        {
+
+            double dx = ex - px;
+            double dy = ey - py;
+            double x = x1;
+            double y = y1;
+                if (Math.Abs(dx) > Math.Abs(dy))
+                {
+                    y = py + (x - px) * (dy) / (dx);
+                }
+                else
+                {
+                    x = px + (y - py) * (dx) / (dy);
+                }
+
+            double h = Hypot(x1 - x, y1 - y);
+            return h < p;
+        }
+        private bool IsBackSpeed(double speedModule)
+        {
+            return Math.Abs(Math.Cos(self.Angle) * speedModule - self.SpeedX) +
+           Math.Abs(Math.Sin(self.Angle) * speedModule - self.SpeedY) < 0.1D;
+        }
+
+        private void FireinEnemy(Move move)
+        {
+            if (WhoOnMyFireLine() != null) move.IsThrowProjectile = true;
+        }
+
+        private void CorrectCenterPoint(ref double nextWaypointX, ref double nextWaypointY)
+        {
+            double cornerTileOffset = CORNERCORRECTION * game.TrackTileSize;
+
+            switch (world.TilesXY[Transform(nextWaypointX)][Transform(nextWaypointY)])
             {
                 case TileType.LeftTopCorner:
                     nextWaypointX += cornerTileOffset;
@@ -144,8 +212,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
         MyWay FindWay(double px,double py, int wx, int wy)
         {
             CopyMap();
-            int x = TransformX(px);
-            int y = TransformY(py);
+            int x = Transform(px);
+            int y = Transform(py);
             myMap[x][y].lenCount = 1;// startpoint
             int lenCount = FillShortWay(wx, wy);
             if (lenCount <= 2) return new MyWay(wx, wy);
@@ -153,12 +221,13 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             myWay[lenCount - 1] = new MyWay(wx, wy);
             if (isNoWallAtLine(px, py, myWay[lenCount - 1], lenCount)) {
                 return myWay[lenCount - 1]; }
-
+            bool isNearWall = IsNearWallsEdges();
             for (int i = lenCount-1; i >= 1; i--) {
                 double accelerate = (lenCount - i) * (1.0D / lenCount);
                 myWay[i-1] = FindAround(i, myWay );
                 myWay[i - 1].Acelerate = accelerate;
-                if (isNoWallAtLine(px, py, myWay[i - 1], i))return myWay[i - 1];
+                if (isNearWall) continue;
+                if ( isNoWallAtLine(px, py, myWay[i - 1], i))return myWay[i - 1];
             }
 
              return myWay[1];
@@ -172,8 +241,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             double x = x0, y = y0;
             double dx = x1 - x0;
             double dy = y1 - y0;
+            int xw, yw;
 
-            double d;
             int i=0, l;
 
             while (true) {
@@ -187,14 +256,34 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
                     y += dy > 0 ? 1.0D : -1.0D;
                 }
                 if (++i >= l) break;
-                int w = WaveAt(TransformX(x), TransformY(y));
-                if (w == 0 || w > lenCount)  return false; 
+                xw = Transform(x);
+                yw = Transform(y);
+                MyMap myTile = new MyMap();
+                int w = WaveAt(xw, yw, myTile);
+                if (w == 0 || w > lenCount)  return false;
+                if (IsInnerWallIn(x-DTransoform0(xw) , y-DTransoform0(yw), myTile)) return false;
         }
             return true;
 
         }
 
+        private bool IsInnerWallIn(double v1, double v2, MyMap myTile)
+        {
 
+            if (CoordsInEdgeRadius(v1, v2, game.TrackTileSize / 10 )) return true;//game.CarWidth/1.9D + 
+                                                                                 // if (!fromTile.ContainsKey(myTile.tile)) return false;
+                                                                                 //Direction[] dir = fromTile[myTile.tile];
+            return false;
+        }
+
+        private bool CoordsInEdgeRadius(double v1, double v2,double radius)
+        {
+            if (Hypot(v1, v2) < radius) return true;
+            if (Hypot(game.TrackTileSize-v1, game.TrackTileSize-v2) < radius) return true;
+            if (Hypot(v1, game.TrackTileSize - v2) < radius) return true;
+            if (Hypot(game.TrackTileSize - v1,  v2) < radius) return true;
+            return false;
+        }
 
         MyWay FindAround(int i, MyWay[] tempWay)
         {
@@ -359,11 +448,30 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
         }
 
 
+
+        private Car WhoOnMyFireLine()
+        {
+
+            var search = from Car enemy in world.Cars
+                         where
+                         IsEnemyOnMyFireLine(enemy)
+                         select enemy;
+            return search.FirstOrDefault();
+
+        }
+
+        private bool IsEnemyOnMyFireLine(Car enemy)
+        {
+            return !enemy.IsTeammate && Math.Abs(self.GetAngleTo(enemy)) < 0.1D
+                                     && self.GetDistanceTo(enemy) < game.TrackTileSize*2;
+        }
+
+
+
         double Hypot(double x, double y) { return Math.Sqrt(x * x + y * y); }
-        int TransformX(double x) { return (int)( (x ) / game.TrackTileSize); }
-        int TransformY(double y) { return (int)( (y ) / game.TrackTileSize); }
-        double InvTransoftmX(int x) { return (double)(x) * game.TrackTileSize; }
-        double InvTransoftmY(int x) { return (double)(x) * game.TrackTileSize; }
+        int Transform(double x) { return (int)( (x ) / game.TrackTileSize); }
+        double InvTransoform(int x) { return (double)(x + 0.5D) * game.TrackTileSize; }
+        double DTransoform0(int x) { return (double)(x ) * game.TrackTileSize; }
 
 
         class MyWay
