@@ -8,11 +8,12 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
     public sealed class MyStrategy : IStrategy {
         const int MAXSTOPCOUNT = 30;
         const double MINSPEED = 0.09D;
-        const int MAXBACKTICKS = 90;
+        const int MAXBACKTICKS = 190;
         const int MAXWAYITERATIONS = 100;//максимально возможная длина пути (ограничить проц время)
         const int MAXERRORBLOCKS = 8;
         const double PRETURNSPEEDMUL = 15.5D;
         const double CORNERCORRECTION = -0.25D;
+        const double FORWARDWALLDETECT = 15.0D;
         enum MovingState
         {
             FORWARD,
@@ -34,7 +35,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
         private int stopTickCount = 0;
        
         MyMap[][] myMap;
-        int errorBlockCount = 0; //если столкнулись со стеной то несколько блоков едем "осторожно" без предсказаний
+        //int errorBlockCount = 0; //если столкнулись со стеной то несколько блоков едем "осторожно" без предсказаний
 
         public MyStrategy() {
             FillFromTileTable();
@@ -43,57 +44,55 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
 
         public void Move(Car self, World world, Game game, Move move)
         {
+           
+            move.EnginePower = 1.0D;// (0.95D);
             Construct(self, world, game, move);
             AnalyzeCurrentSpeedAndState();
-            //if (world.Tick < game.InitialFreezeDurationTicks) FindWays();
-
-            if (world.Tick == game.InitialFreezeDurationTicks)
-            {
-                move.IsUseNitro = true;
-            }
-
-            // DebugMap(self, world);
             MyWay way = FindWay(self.X,self.Y, self.NextWaypointX, self.NextWaypointY);
             double nextWaypointX = way.GetCenterX(game.TrackTileSize);
             double nextWaypointY = way.GetCenterY(game.TrackTileSize);
+            DebugNextWay(way.x2, way.y2);
             double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
-            move.EnginePower = 1.0D;// (0.95D);
-            if (distance < (game.TrackTileSize+speedModule*PRETURNSPEEDMUL))//800*1250*32/
+            //errorBlockCount = 1;
+            if (distance < (game.TrackTileSize + speedModule * PRETURNSPEEDMUL) )//800*1250*32/
             {
                 int nextWayPointIndex = (self.NextWaypointIndex + 1) % world.Waypoints.Length;
-                 way = FindWay(self.X, self.Y, world.Waypoints[nextWayPointIndex][0], world.Waypoints[nextWayPointIndex][1]);
-                 nextWaypointX = way.GetCenterX(game.TrackTileSize);
-                 nextWaypointY = way.GetCenterY(game.TrackTileSize);
+                way = FindWay(self.X, self.Y, world.Waypoints[nextWayPointIndex][0], world.Waypoints[nextWayPointIndex][1]);
+                nextWaypointX = way.GetCenterX(game.TrackTileSize);
+                nextWaypointY = way.GetCenterY(game.TrackTileSize);
                 move.IsSpillOil = true;
             }
-
+            else
+            {
+                // errorBlockCount = 0;
+                if (world.Tick > game.InitialFreezeDurationTicks)
+                    if (distance > (game.TrackTileSize * 5) && isNoWallAtLine(self.X, self.Y, new MyWay(self.NextWaypointX, self.NextWaypointY), 10)) 
+                move.IsUseNitro = true;
+            }
+            DebugNextWay(way.x2, way.y2);
+            //  if (errorBlockCount > 0) move.EnginePower = 0.75D; else
             CorrectCenterPoint(ref nextWaypointX, ref nextWaypointY);
 
             if (distance < game.TrackTileSize * speedModule)//800*1250*32/
             {
                 move.EnginePower = 15.0D / speedModule;
-                if (errorBlockCount > 0) move.IsBrake = true;
+                //if (errorBlockCount > 0) move.IsBrake = true;
             }
-            if (distance > game.TrackTileSize * 10)//800*1250*32/
+            if (distance > game.TrackTileSize * 15)//800*1250*32/
             {
-                move.IsUseNitro = true;
+                //move.IsUseNitro = true;
             }
             double angleToWaypoint = self.GetAngleTo(nextWaypointX, nextWaypointY);
-            DebugSpeed(speedModule);
-           // CorrectAngleFromWallsEdges(move, ref angleToWaypoint);
-           // if(!IsBackSpeed(speedModule))//IsBackSpeed(speedModule) ? -1.0D : 1.0 * 
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
-           
-
-            if (speedModule * speedModule * Math.Abs(angleToWaypoint) > 5.5D * 2.5D * Math.PI)
+            if (speedModule * speedModule * Math.Abs(angleToWaypoint) > 2.5D * 2.5D * Math.PI )
             {
-               // move.IsBrake = true;
+                //move.IsBrake = true;
                 //move.IsUseNitro = true;
             }
 
             if (currentState == MovingState.BACKWARD)
             {
-                //if(stateTickCount < MAXBACKTICKS /2)
+                if(stateTickCount < MAXBACKTICKS /2)
                     move.EnginePower = -1;
                 //move.IsUseNitro = true;
                 move.IsBrake = false;
@@ -106,17 +105,17 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
 
         }
 
-        private bool IsNearWallsEdges()
+        private bool IsNearWallsEdges(double forwardWallDetect)
         {
             return false;
-            double fx = self.SpeedX * 10.0D;
-            double fy = self.SpeedY * 10.0D;
+            double fx = self.SpeedX * forwardWallDetect;
+            double fy = self.SpeedY * forwardWallDetect;
 
             int myX = Transform(self.X);
             int myY = Transform(self.Y);
             double cellX = self.X - DTransoform0(myX);
             double cellY = self.Y - DTransoform0(myY);
-            double p = game.TrackTileSize / 55;// + game.CarWidth / 2;
+            double p = game.TrackTileSize / 25 + game.CarWidth / 2;
             if (OnMyLine(cellX, cellY, 0, 0, fx, fy, p) ||
                             OnMyLine(cellX, cellY, game.TrackTileSize, 0, fx, fy, p) ||
                             OnMyLine(cellX, cellY, 0, game.TrackTileSize, fx, fy, p) ||
@@ -146,6 +145,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             double h = Hypot(x1 - x, y1 - y);
             return h < p;
         }
+
         private bool IsBackSpeed(double speedModule)
         {
             return Math.Abs(Math.Cos(self.Angle) * speedModule - self.SpeedX) +
@@ -191,7 +191,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             }
         }
 
-        private static void DebugMap(Car self, World world)
+        private  void DebugMap()
         {
             for (int x = 0; x < world.TilesXY.Length; x++)
             {
@@ -213,10 +213,27 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
                 Console.WriteLine(" ");
 
             }
+            //DebugNextWay();
+        }
+
+
+        private void DebugFindMap()
+        {
+            for (int x = 0; x < myMap.Length; x++) { 
+                for (int y = 0; y < myMap[x].Length; y++)
+                {
+                    MyMap myTile = myMap[x][y];
+                    Console.Write(myTile.lenCount);
+                }
+                Console.WriteLine(" ");
+
+            }
             Console.WriteLine("-------");
-            Console.WriteLine(self.NextWaypointX);
-            Console.WriteLine(self.NextWaypointY);
-            Console.WriteLine(self.NextWaypointIndex);
+        }
+
+        private void DebugNextWay(int x,int y)
+        {
+            Console.WriteLine(x.ToString() + " " + y.ToString());
             Console.WriteLine("-------");
         }
 
@@ -227,17 +244,21 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             int y = Transform(py);
             myMap[x][y].lenCount = 1;// startpoint
             int lenCount = FillShortWay(wx, wy);
+           // DebugFindMap();
+            //DebugNextWay(wx, wy);
+            //Console.WriteLine("---my----");
+           // DebugNextWay(x, y);
             if (lenCount <= 2) return new MyWay(wx, wy);
             MyWay[] myWay = new MyWay[lenCount];
-            myWay[lenCount - 1] = new MyWay(wx, wy);
-            if (errorBlockCount==0&&isNoWallAtLine(px, py, myWay[lenCount - 1], lenCount)) {
+            myWay[lenCount - 1] = new MyWay(wx, wy, myMap[wx][wy]);
+            if (isNoWallAtLine(px, py, myWay[lenCount - 1], lenCount)) {
                 return myWay[lenCount - 1]; }
-            bool isNearWall = IsNearWallsEdges();
-            for (int i = lenCount-1; i >= 1; i--) {
-                double accelerate = (lenCount - i) * (1.0D / lenCount);
+            bool isNearWall = IsNearWallsEdges(FORWARDWALLDETECT);
+            for (int i = lenCount-1; i > 1; i--) {
+                //double accelerate = (lenCount - i) * (1.0D / lenCount);
                 myWay[i-1] = FindAround(i, myWay );
-                myWay[i - 1].Acelerate = accelerate;
-                if (isNearWall||errorBlockCount>0) continue;
+                //myWay[i - 1].Acelerate = accelerate;
+                if (isNearWall) continue;
                 if ( isNoWallAtLine(px, py, myWay[i - 1], i))return myWay[i - 1];
             }
 
@@ -298,16 +319,33 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
 
         MyWay FindAround(int i, MyWay[] tempWay)
         {
-            int x1,x = tempWay[i].x2;
-            int y1,y = tempWay[i].y2;
-            x1 = x;         y1 = y;
-            if (isNextWaveAt(x + 1, y, i)) x1 = x + 1;
-            if (isNextWaveAt(x - 1, y, i)) x1 = x - 1;
-            if (isNextWaveAt(x , y+1, i)) y1 = y + 1;
-            if (isNextWaveAt(x , y-1, i)) y1 = y - 1;
+            int  x = tempWay[i].x2;
+            int  y = tempWay[i].y2;
+            //bug необходимо учитывать тип тайла иначе может возникнуть ситуация 
+            //    123 - от этой двойки никак не пробраться к нижней тройке
+            //    23
+            Direction[] dir = new Direction[] { };
+
+            MyMap thisTile = tempWay[i].myTile;
+            if (fromTile.ContainsKey(thisTile.tile))
+                dir = fromTile[thisTile.tile];
+
+            MyWay myWay = DirectionsContainsWave(i, x,  y, dir);
+            //if(x==x1&&y==y1)//баг если к этой точке придут 2 пути одинаковой длины то алгоритм зависнет
             MyMap myTile = new MyMap();
-            WaveAt(x1, y1, myTile);
-            return new MyWay(x1,y1, myTile);
+            WaveAt(myWay.x2, myWay.y2, myTile);
+            myWay.myTile = myTile;
+            return myWay;
+        }
+
+        private MyWay DirectionsContainsWave(int i,  int x, int y, Direction[] dir)
+        {
+            MyWay myWay = new MyWay(x, y);
+            if (dir.Contains(Direction.Right) && isNextWaveAt(x + 1, y, i)) { myWay.x2 = x + 1; return myWay; }
+            if (dir.Contains(Direction.Left) && isNextWaveAt(x - 1, y, i)) { myWay.x2 = x - 1; return myWay; }
+            if (dir.Contains(Direction.Down) && isNextWaveAt(x, y + 1, i)) { myWay.y2 = y + 1; return myWay; }
+            if (dir.Contains(Direction.Up) && isNextWaveAt(x, y - 1, i)) { myWay.y2 = y - 1; return myWay; }
+            return myWay;
         }
 
         private bool isNextWaveAt(int x, int y, int i)
@@ -324,7 +362,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
         int WaveAt(int x, int y, MyMap myTile)
         {
             if (x < 0 || y < 0 || x >= myMap.Length || y >= myMap[x].Length) return 0;
-            myTile = myMap[x][y];
+            myTile.tile = myMap[x][y].tile;
+            myTile.lenCount = myMap[x][y].lenCount;
             if (!fromTile.ContainsKey(myTile.tile)) return 0;
             return myTile.lenCount;
         }
@@ -335,7 +374,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             int shortLen;
             for (int i = MAXWAYITERATIONS; i >= 0; i--)
             {
-                shortLen = FillOneWave(self.NextWaypointX, self.NextWaypointY);
+                shortLen = FillOneWave(nextWaypointX, nextWaypointY);
                 if (shortLen > 0) return shortLen;
             }
             return 0;
@@ -442,7 +481,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
                 stateTickCount = 0;
                 if (WallCollisionDetect())
                 {
-                    errorBlockCount = MAXERRORBLOCKS;
+                    //errorBlockCount = MAXERRORBLOCKS;
                 }
             }
             if (currentState == MovingState.BACKWARD) {
