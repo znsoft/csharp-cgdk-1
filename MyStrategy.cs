@@ -9,7 +9,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
         const int MAXSTOPCOUNT = 30;
         const double MINSPEED = 0.09D;
         const int MAXBACKTICKS = 90;
-        const int MAXWAYITERATIONS = 100;
+        const int MAXWAYITERATIONS = 100;//максимально возможная длина пути (ограничить проц время)
+        const int MAXERRORBLOCKS = 8;
         const double PRETURNSPEEDMUL = 15.5D;
         const double CORNERCORRECTION = -0.25D;
         enum MovingState
@@ -33,6 +34,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
         private int stopTickCount = 0;
        
         MyMap[][] myMap;
+        int errorBlockCount = 0; //если столкнулись со стеной то несколько блоков едем "осторожно" без предсказаний
 
         public MyStrategy() {
             FillFromTileTable();
@@ -70,13 +72,14 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             if (distance < game.TrackTileSize * speedModule)//800*1250*32/
             {
                 move.EnginePower = 15.0D / speedModule;
+                if (errorBlockCount > 0) move.IsBrake = true;
             }
             if (distance > game.TrackTileSize * 10)//800*1250*32/
             {
                 move.IsUseNitro = true;
             }
             double angleToWaypoint = self.GetAngleTo(nextWaypointX, nextWaypointY);
-            Console.WriteLine((Math.Cos(self.Angle)* speedModule).ToString()+" "+ (Math.Sin(self.Angle) * speedModule).ToString()+" "+self.SpeedX.ToString()+" "+self.SpeedY.ToString());
+            DebugSpeed(speedModule);
            // CorrectAngleFromWallsEdges(move, ref angleToWaypoint);
            // if(!IsBackSpeed(speedModule))//IsBackSpeed(speedModule) ? -1.0D : 1.0 * 
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
@@ -90,7 +93,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
 
             if (currentState == MovingState.BACKWARD)
             {
-                move.EnginePower = -1;
+                //if(stateTickCount < MAXBACKTICKS /2)
+                    move.EnginePower = -1;
                 //move.IsUseNitro = true;
                 move.IsBrake = false;
                 move.WheelTurn = -move.WheelTurn;
@@ -146,6 +150,13 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
         {
             return Math.Abs(Math.Cos(self.Angle) * speedModule - self.SpeedX) +
            Math.Abs(Math.Sin(self.Angle) * speedModule - self.SpeedY) < 0.1D;
+        }
+
+
+        private void DebugSpeed(double speedModule)
+        {
+            Console.WriteLine((Math.Cos(self.Angle) * speedModule).ToString() + " " + self.SpeedX.ToString() + " " + (Math.Sin(self.Angle) * speedModule).ToString() + " " + self.SpeedY.ToString());
+
         }
 
         private void FireinEnemy(Move move)
@@ -219,14 +230,14 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
             if (lenCount <= 2) return new MyWay(wx, wy);
             MyWay[] myWay = new MyWay[lenCount];
             myWay[lenCount - 1] = new MyWay(wx, wy);
-            if (isNoWallAtLine(px, py, myWay[lenCount - 1], lenCount)) {
+            if (errorBlockCount==0&&isNoWallAtLine(px, py, myWay[lenCount - 1], lenCount)) {
                 return myWay[lenCount - 1]; }
             bool isNearWall = IsNearWallsEdges();
             for (int i = lenCount-1; i >= 1; i--) {
                 double accelerate = (lenCount - i) * (1.0D / lenCount);
                 myWay[i-1] = FindAround(i, myWay );
                 myWay[i - 1].Acelerate = accelerate;
-                if (isNearWall) continue;
+                if (isNearWall||errorBlockCount>0) continue;
                 if ( isNoWallAtLine(px, py, myWay[i - 1], i))return myWay[i - 1];
             }
 
@@ -429,6 +440,10 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
                 currentState = MovingState.BACKWARD;
                 stopTickCount = 0;
                 stateTickCount = 0;
+                if (WallCollisionDetect())
+                {
+                    errorBlockCount = MAXERRORBLOCKS;
+                }
             }
             if (currentState == MovingState.BACKWARD) {
                 stateTickCount++;
@@ -437,6 +452,14 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk {
                 }
             }
 
+        }
+
+        private bool WallCollisionDetect()
+        {
+            double f = Hypot(game.CarHeight, game.CarWidth) + game.TrackTileSize / 10.0D;
+            double fx = self.X + f * Math.Cos(self.Angle);
+            double fy = self.Y + f * Math.Sin(self.Angle);
+            return Transform(fx) != Transform(self.X) || Transform(fy) != Transform(self.Y);
         }
 
         private void Construct(Car self, World world, Game game, Move move)
