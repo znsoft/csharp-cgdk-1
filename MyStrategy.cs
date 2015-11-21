@@ -14,9 +14,12 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         const double PRECALCDIRECTIONOFFSET = 23;
         const int MAXWAYITERATIONS = 20;//максимально возможная длина пути (ограничить проц время)
         const int MAXERRORBLOCKS = 8;
-        const double PRE_TURN_SPEEDMUL = 14.5D;
+        const double PRE_TURN_SPEEDMUL = 15.5D;
         const double CORNERCORRECTION = -0.25D;
         const double FORWARDWALLDETECT = 15.0D;
+        const double LINESTEP = 15.0D;
+        const double BREAKTRESHHOLD = 4000.0D;
+
         enum MovingState
         {
             FORWARD,
@@ -54,18 +57,12 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             Construct(self, world, game, move);
             AnalyzeCurrentSpeedAndState();
             MyWay way = FindWay(self.X, self.Y, self.NextWaypointX, self.NextWaypointY);
-            double nextWaypointX = way.GetCenterX(game.TrackTileSize);
-            double nextWaypointY = way.GetCenterY(game.TrackTileSize);
             double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
-            PreCalcNextWayPoint(self, world, game, move, ref way, ref nextWaypointX, ref nextWaypointY, distance);
-            CorrectCenterPoint(ref nextWaypointX, ref nextWaypointY);
-
-            CorrectInOutWayPoint(way, ref nextWaypointX, ref nextWaypointY, speedModule);
-
-            double angleToWaypoint = self.GetAngleTo(nextWaypointX, nextWaypointY);
+            PreCalcNextWayPoint(self, world, game, move, ref way, distance);
+            double angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
 
-            if (speedModule * speedModule * speedModule * Math.Abs(angleToWaypoint) > 4500.0D)
+            if (speedModule * speedModule * speedModule * Math.Abs(angleToWaypoint) > BREAKTRESHHOLD)
             {
                 move.IsBrake = true;
             }
@@ -84,7 +81,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                     move.EnginePower = -1;
                 //move.IsUseNitro = true;
                 move.IsBrake = false;
-                if (stateTickCount < MAXBACKTICKS / 2) move.WheelTurn = -move.WheelTurn;
+                if (stateTickCount < MAXBACKTICKS / 2) move.WheelTurn = -move.WheelTurn*1.8D;
             }
         }
 
@@ -112,6 +109,23 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             if (offset == null) return;
             nextWaypointX += offset.x;
             nextWaypointY += offset.y;
+        }
+
+        private void CorrectInOutWayPoint(MyWay way)
+        {
+
+            if (!way.isInDirected && !way.isOutDirected) return;
+            if (way.target == null) way.CalcTargetCenter(game.TrackTileSize);
+            double size = speedModule * PRECALCDIRECTIONOFFSET + game.TrackTileSize / 2;
+
+            Vector2 next = way.target;
+            Vector2 offset = null;
+            if (way.isInDirected) offset = GetInOffset(way.dirIn, next, size);
+            if (offset == null && way.isOutDirected)
+                offset = GetOutOffset(way.dirOut, next, size);
+            if (offset == null) return;
+            way.target.x += offset.x;
+            way.target.y += offset.y;
         }
 
         private Vector2 GetOutOffset(Direction dir, Vector2 next, double size)
@@ -157,7 +171,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return null;
         }
 
-        private void PreCalcNextWayPoint(Car self, World world, Game game, Move move, ref MyWay way, ref double nextWaypointX, ref double nextWaypointY, double distance)
+        private void PreCalcNextWayPoint(Car self, World world, Game game, Move move, ref MyWay way, double distance)
         {
             if (distance < (game.TrackTileSize + speedModule * PRE_TURN_SPEEDMUL))//800*1250*32/
             {
@@ -166,23 +180,13 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 int nwx = world.Waypoints[nextWayPointIndex][0];
                 int nwy = world.Waypoints[nextWayPointIndex][1];
                 way = FindWay(self.X, self.Y, nwx, nwy);
-                nextWaypointX = way.GetCenterX(game.TrackTileSize);
-                nextWaypointY = way.GetCenterY(game.TrackTileSize);
 
-            }
-            else
-            {
-                // errorBlockCount = 0;
-                /*if (world.Tick > game.InitialFreezeDurationTicks)
-                    if (distance > (game.TrackTileSize * 5) && isNoWallAtLine(self.X, self.Y, new MyWay(self.NextWaypointX, self.NextWaypointY), 10))
-                        move.IsUseNitro = true;
-                        */
             }
         }
 
-        private bool IsNearWallsEdges(double forwardWallDetect)
+        private bool IsNearWallsEdges(double forwardWallDetect)//если в данный момент несемся на стену
         {
-            return false;
+            //return false;
             double fx = self.SpeedX * forwardWallDetect;
             double fy = self.SpeedY * forwardWallDetect;
 
@@ -321,22 +325,24 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             int y = Transform(py);
             myMap[x][y].waveLen = 1;// startpoint
             int lenCount = FillShortWay(wx, wy);
-            if (lenCount <= 2) return (new MyWay(wx, wy)).CalcTargetCenter(game.TrackTileSize);//соседняя клетка
+            if (lenCount <= 2) return (new MyWay(wx, wy)).CalcTargetCenter(game.TrackTileSize);//найден путь и это соседняя клетка
             MyWay[] myWay = new MyWay[lenCount];
             myWay[lenCount - 1] = (new MyWay(wx, wy, myMap[wx][wy])).CalcTargetCenter(game.TrackTileSize);
-            if (isNoWallAtLine(px, py, myWay[lenCount - 1], lenCount))//в прямом поле видимости
-            {
-                return myWay[lenCount - 1];
-            }
-            bool isNearWall = IsNearWallsEdges(FORWARDWALLDETECT);
+           
             for (int i = lenCount - 1; i > 1; i--)
             {
-                //double accelerate = (lenCount - i) * (1.0D / lenCount);
                 myWay[i - 1] = FindAround(i, myWay).CalcTargetCenter(game.TrackTileSize);
-                //myWay[i - 1].Acelerate = accelerate;
-                if (isNearWall) continue;
-                if (isNoWallAtLine(px, py, myWay[i - 1], i)) return myWay[i - 1];
+                CorrectInOutWayPoint(myWay[i-1]);
             }
+            CorrectInOutWayPoint(myWay[lenCount - 1]);
+            bool isNearWall = IsNearWallsEdges(FORWARDWALLDETECT);
+            if (!isNearWall)
+                for (int i = lenCount - 1; i > 1; i--)
+                {
+
+                    if (isNoWallAtLine(px, py, myWay[i], i)) return myWay[i];
+                }
+            
 
             return myWay[1];
         }
@@ -348,12 +354,15 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         bool isNoWallAtLine(double x0, double y0, MyWay myWay, int lenCount)//рисует линию проверяя на каждом шаге на тайл и касание внутренних углов/стен тайла
         {
-            double x1 = myWay.GetCenterX(game.TrackTileSize);
-            double y1 = myWay.GetCenterY(game.TrackTileSize);
+//            double x1 = myWay.GetCenterX(game.TrackTileSize);
+//            double y1 = myWay.GetCenterY(game.TrackTileSize);
+            double x1 = myWay.target.x;
+            double y1 = myWay.target.y;
             double x = x0, y = y0;
             double dx = x1 - x0;
             double dy = y1 - y0;
             int xw, yw;
+            
 
             int i = 0, l;
 
@@ -361,15 +370,15 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             {
                 if (Math.Abs(dx) > Math.Abs(dy))
                 {
-                    l = (int)Math.Abs(dx);
+                    l = (int)Math.Abs(dx/LINESTEP);
                     y = y0 + (x - x0) * (dy) / (dx);
-                    x += dx > 0 ? 1.0D : -1.0D;
+                    x += dx > 0 ? LINESTEP : -LINESTEP;
                 }
                 else
                 {
-                    l = (int)Math.Abs(dy);
+                    l = (int)Math.Abs(dy / LINESTEP);
                     x = x0 + (y - y0) * (dx) / (dy);
-                    y += dy > 0 ? 1.0D : -1.0D;
+                    y += dy > 0 ? LINESTEP : -LINESTEP;
                 }
                 if (++i >= l) break;
                 xw = Transform(x);
