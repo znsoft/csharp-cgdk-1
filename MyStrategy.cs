@@ -63,7 +63,10 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             MyWay way = FindOptimalWay(myFuturePos.x, myFuturePos.y, self.NextWaypointX, self.NextWaypointY);
             double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
             PreCalcNextWayPoint(self, world, game, move, ref way, distance);
-            IsForwardWallsEdges();
+            if (IsForwardWallsEdges()) {
+
+                Console.WriteLine(self.AngularSpeed.ToString());
+            }
             angleToWaypoint = GetAngleFromTo(myFuturePos.x, myFuturePos.y , self.Angle, way.target.x, way.target.y);
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
             angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
@@ -231,13 +234,13 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             double dy = myCoord.y - corner.y ;
             double x,y;
             if (Math.Abs(dx) > Math.Abs(dy))
-            { if (dx != 0.0D) return false;
+            { if (dx == 0.0D) return false;
                 x = corner.x;
                 y = myCoord.y + (corner.x) * (dy) / (dx) ;
             }
             else
             {
-                if (dy != 0.0D) return false;
+                if (dy == 0.0D) return false;
                 y = corner.y;
                 x = myCoord.x + (corner.y) * (dx) / (dy);
             }
