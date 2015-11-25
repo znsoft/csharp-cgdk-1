@@ -227,18 +227,28 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             Vector2[] corners = new Vector2[] { new Vector2(0,0),new Vector2(0,c), new Vector2(c,0), new Vector2(c, c) };
             Vector2 myCoord = new Vector2(TransormToCellCoord(self.X), TransormToCellCoord(self.Y));
             Vector2 corner = new Vector2(Math.Sign(self.SpeedX)>0? c :0, Math.Sign(self.SpeedY) > 0 ? c : 0);
-            double dx = corner.x - myCoord.x;
-            double dy = corner.y - myCoord.y;
+            double dx = myCoord.x - corner.x ;
+            double dy = myCoord.y - corner.y ;
             double x,y;
-            y = dx != 0.0D ?  (corner.x - myCoord.x) * (dy) / (dx) : myCoord.y;
-            x = dy != 0.0D ?  (corner.y - myCoord.y) * (dx) / (dy) : myCoord.x;
-            if (x > -game.TrackTileMargin && x < c + game.TrackTileMargin) y = corner.y;
-            if (y > -game.TrackTileMargin && y < c + game.TrackTileMargin) x = corner.x;
-            double distance = Hypot(x, y);
-            double ticks = (speedModule == 0.0D)?0.0D:distance / speedModule;
+            if (Math.Abs(dx) > Math.Abs(dy))
+            { if (dx != 0.0D) return false;
+                x = corner.x;
+                y = myCoord.y + (corner.x) * (dy) / (dx) ;
+            }
+            else
+            {
+                if (dy != 0.0D) return false;
+                y = corner.y;
+                x = myCoord.x + (corner.y) * (dx) / (dy);
+            }
+
+            double distance = Hypot(x - corner.x, y - corner.y);
+            double ticks = distance / speedModule;
+
             double ang = self.AngularSpeed * ticks;
             x += speedModule * Math.Cos(ang);
             y += speedModule * Math.Sin(ang);
+
             foreach (Vector2 testCorner in corners) {
                 if (game.TrackTileMargin + game.CarWidth / 2 > Hypot(x - testCorner.x, y - testCorner.y)) return true;
             }
