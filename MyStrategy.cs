@@ -33,6 +33,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
 
         Dictionary<TileType, Direction[]> fromTile = new Dictionary<TileType, Direction[]>();
+        Dictionary<TileType, Direction[]> wallTile = new Dictionary<TileType, Direction[]>();
         TileType[] ForwardDirectionTiles = new TileType[] { TileType.Horizontal, TileType.Vertical };
 
         Car self;
@@ -50,8 +51,10 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         public MyStrategy()
         {
             FillFromTileTable();
+            FillWallTileTable();
         }
 
+    
 
         public void Move(Car self, World world, Game game, Move move)
         {
@@ -398,24 +401,34 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 int w = WaveAt(xw, yw, myTile);//если линия попала внутрь стены
                 if (w == 0 || w > lenCount) return false;
                 distance += 1.5D;
-                if (IsInnerWallIn(x - DTransoform0(xw), y - DTransoform0(yw), distance)) return false;//если линия касается внутренней стены тайла
+                if (IsInnerWallIn(x - DTransoform0(xw), y - DTransoform0(yw), distance, myTile)) return false;//если линия касается внутренней стены тайла
 
             }
             return true;
 
         }
 
-        private bool IsInnerWallIn(double v1, double v2,  double distance)
+        private bool IsInnerWallIn(double v1, double v2,  double distance, WaveMapCell myTile)
         {
-            return CoordsInEdgeRadius(v1, v2, game.CarWidth / 2 + game.TrackTileMargin - distance);
+            return CoordsInEdgeRadius(v1, v2, game.CarWidth / 2 + game.TrackTileMargin - distance, myTile);
         }
 
-        private bool CoordsInEdgeRadius(double v1, double v2, double radius)
+        private bool CoordsInEdgeRadius(double v1, double v2, double radius, WaveMapCell myTile)
         {
             if (Hypot(v1, v2) < radius) return true;
             if (Hypot(game.TrackTileSize - v1, game.TrackTileSize - v2) < radius) return true;
             if (Hypot(v1, game.TrackTileSize - v2) < radius) return true;
             if (Hypot(game.TrackTileSize - v1, v2) < radius) return true;
+            if (!wallTile.ContainsKey(myTile.tile)) return true;
+            Direction[] dirs = wallTile[myTile.tile];
+
+            foreach (Direction dir in dirs) {
+                if (dir == Direction.Up) if (v2 < radius) return true;
+                if (dir == Direction.Down) if (v2 > radius) return true;
+                if (dir == Direction.Right) if (v1 < radius) return true;
+                if (dir == Direction.Left) if (v1 > radius) return true;
+            }
+
             return false;
         }
 
@@ -495,20 +508,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return 0;
         }
 
-        private void FillFromTileTable()
-        {
-            fromTile.Add(TileType.Vertical, new Direction[] { Direction.Down, Direction.Up });
-            fromTile.Add(TileType.Horizontal, new Direction[] { Direction.Left, Direction.Right });
-            fromTile.Add(TileType.Crossroads, new Direction[] { Direction.Left, Direction.Right, Direction.Down, Direction.Up });
-            fromTile.Add(TileType.BottomHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Down });
-            fromTile.Add(TileType.LeftBottomCorner, new Direction[] { Direction.Right, Direction.Up });
-            fromTile.Add(TileType.LeftHeadedT, new Direction[] { Direction.Left, Direction.Up, Direction.Down });
-            fromTile.Add(TileType.LeftTopCorner, new Direction[] { Direction.Right, Direction.Down });
-            fromTile.Add(TileType.RightBottomCorner, new Direction[] { Direction.Left, Direction.Up });
-            fromTile.Add(TileType.RightHeadedT, new Direction[] { Direction.Right, Direction.Down, Direction.Up });
-            fromTile.Add(TileType.RightTopCorner, new Direction[] { Direction.Left, Direction.Down });
-            fromTile.Add(TileType.TopHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Up });
-        }
+
+
 
         int FillOneWave(int wx, int wy)
         {
@@ -672,6 +673,38 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         double InvTransoform(int x) { return (double)(x + 0.5D) * game.TrackTileSize; }
         double DTransoform0(int x) { return (double)(x) * game.TrackTileSize; }
         double TransormToCellCoord(double x) {int myX = Transform(x); return x - DTransoform0(myX);   }
+
+
+        private void FillFromTileTable()
+        {
+            fromTile.Add(TileType.Vertical, new Direction[] { Direction.Down, Direction.Up });
+            fromTile.Add(TileType.Horizontal, new Direction[] { Direction.Left, Direction.Right });
+            fromTile.Add(TileType.Crossroads, new Direction[] { Direction.Left, Direction.Right, Direction.Down, Direction.Up });
+            fromTile.Add(TileType.BottomHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Down });
+            fromTile.Add(TileType.LeftBottomCorner, new Direction[] { Direction.Right, Direction.Up });
+            fromTile.Add(TileType.LeftHeadedT, new Direction[] { Direction.Left, Direction.Up, Direction.Down });
+            fromTile.Add(TileType.LeftTopCorner, new Direction[] { Direction.Right, Direction.Down });
+            fromTile.Add(TileType.RightBottomCorner, new Direction[] { Direction.Left, Direction.Up });
+            fromTile.Add(TileType.RightHeadedT, new Direction[] { Direction.Right, Direction.Down, Direction.Up });
+            fromTile.Add(TileType.RightTopCorner, new Direction[] { Direction.Left, Direction.Down });
+            fromTile.Add(TileType.TopHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Up });
+        }
+
+        private void FillWallTileTable()
+        {
+            wallTile.Add(TileType.Vertical, new Direction[] { Direction.Right, Direction.Left });
+            wallTile.Add(TileType.Horizontal, new Direction[] { Direction.Up, Direction.Down });
+            wallTile.Add(TileType.Crossroads, new Direction[] { });
+            wallTile.Add(TileType.BottomHeadedT, new Direction[] { Direction.Up });
+            wallTile.Add(TileType.LeftBottomCorner, new Direction[] { Direction.Left, Direction.Down});
+            wallTile.Add(TileType.LeftHeadedT, new Direction[] { Direction.Right});
+            wallTile.Add(TileType.LeftTopCorner, new Direction[] { Direction.Left, Direction.Up });
+            wallTile.Add(TileType.RightBottomCorner, new Direction[] { Direction.Right, Direction.Down });
+            wallTile.Add(TileType.RightHeadedT, new Direction[] { Direction.Left });
+            wallTile.Add(TileType.RightTopCorner, new Direction[] { Direction.Right, Direction.Up });
+            wallTile.Add(TileType.TopHeadedT, new Direction[] { Direction.Down });
+
+        }
 
 
         class MyWay
