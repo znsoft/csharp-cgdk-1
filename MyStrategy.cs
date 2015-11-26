@@ -15,7 +15,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         const int MAXWAYITERATIONS = 20;//максимально возможная длина пути (ограничить проц время)
         const int MAXERRORBLOCKS = 8;
         const double PRE_TURN_SPEEDMUL = 15.5D;
-        const double CORNERCORRECTION = -0.23D;
+        static double CORNERCORRECTION = -0.23D;
         const double FORWARDWALLDETECT = 15.0D;
         const double LINESTEP = 15.0D;
         const double BREAKTRESHHOLD = 3900.0D;
@@ -46,6 +46,10 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         WaveMapCell[][] myMap;
         private double angleAfter3Cells;
         double angleToWaypoint;
+        int maxErrorCount = 2;
+        int errorCount = 0;
+        double maxSpeed = 1.0D;
+        double minSpeed = 0.4D;
         //int errorBlockCount = 0; //если столкнулись со стеной то несколько блоков едем "осторожно" без предсказаний
 
         public MyStrategy()
@@ -60,15 +64,19 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         {
             //Console.WriteLine(self.AngularSpeed.ToString());
             myFuturePos = new Vector2(self.X + self.SpeedX * FORECASTMUL, self.Y + self.SpeedY * FORECASTMUL);
-            move.EnginePower = 1.0D;// (0.95D);
+            move.EnginePower = maxSpeed;// (0.95D);
             Construct(self, world, game, move);
             AnalyzeCurrentSpeedAndState();
             MyWay way = FindOptimalWay(myFuturePos.x, myFuturePos.y, self.NextWaypointX, self.NextWaypointY);
             double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
-            PreCalcNextWayPoint(self, world, game, move, ref way, distance);
-            if (IsForwardWallsEdges()) {
+            if(errorCount<maxErrorCount)PreCalcNextWayPoint(self, world, game, move, ref way, distance);
+            if (speedModule * speedModule * Math.Abs(angleToWaypoint) > 2.5D * 2.5D * Math.PI&&errorCount>=maxErrorCount) {
+                move.IsBrake = true;
+            }
 
-                Console.WriteLine(self.AngularSpeed.ToString());
+                if (IsForwardWallsEdges()) {
+
+                //Console.WriteLine(self.AngularSpeed.ToString());
             }
             angleToWaypoint = GetAngleFromTo(myFuturePos.x, myFuturePos.y , self.Angle, way.target.x, way.target.y);
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
@@ -351,13 +359,13 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
             if (lenCount > 3)   angleAfter3Cells = self.GetAngleTo(myWay[3].target.x, myWay[3].target.y);//острота угла поворота
 
-           // if (!isNearWall)
+            if (errorCount<maxErrorCount)
                 for (int i = lenCount > 8 ? 8 : lenCount - 1; i > 0; i--)
                 CorrectInOutWayPoint(myWay[i].CorrectCenterPoint(game.TrackTileSize));//корректируем центры масс клеток
 
             // bool isNearWall = IsNearWallsEdges(5);
 
-            if (!isNearWall)
+            if (!isNearWall&&errorCount<maxErrorCount)
                 for (int i = lenCount - 1; i > 1; i--)
                     if (isNoWallAtLine(px, py, myWay[i], i)) {
                         if (i == 1)                            myWay[i].CalcTargetCenter(game.TrackTileSize);
@@ -603,7 +611,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 stateTickCount = 0;
                 if (IsWallCollisionDetect())
                 {
-                    //errorBlockCount = MAXERRORBLOCKS;
+                    errorCount++;
                 }
             }
             if (currentState == MovingState.BACKWARD)
@@ -614,7 +622,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                     currentState = MovingState.FORWARD;
                 }
             }
-
+            if (errorCount >= maxErrorCount) { maxSpeed = minSpeed; CORNERCORRECTION = 0.25D; }
         }
 
         private bool IsWallCollisionDetect()
