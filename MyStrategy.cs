@@ -351,14 +351,18 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
             if (lenCount > 3)   angleAfter3Cells = self.GetAngleTo(myWay[3].target.x, myWay[3].target.y);//острота угла поворота
 
-            for (int i = lenCount > 8 ? 8 : lenCount - 1; i > 0; i--)
+           // if (!isNearWall)
+                for (int i = lenCount > 8 ? 8 : lenCount - 1; i > 0; i--)
                 CorrectInOutWayPoint(myWay[i].CorrectCenterPoint(game.TrackTileSize));//корректируем центры масс клеток
 
             // bool isNearWall = IsNearWallsEdges(5);
 
             if (!isNearWall)
                 for (int i = lenCount - 1; i > 1; i--)
-                    if (isNoWallAtLine(px, py, myWay[i], i)) return myWay[i];//оптимизируем путь удал€€ ненужные клетки  
+                    if (isNoWallAtLine(px, py, myWay[i], i)) {
+                        if (i == 1)                            myWay[i].CalcTargetCenter(game.TrackTileSize);
+                        return myWay[i];
+                    }//оптимизируем путь удал€€ ненужные клетки  
             return myWay[1];
         }
 
@@ -419,16 +423,16 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             if (Hypot(game.TrackTileSize - v1, game.TrackTileSize - v2) < radius) return true;
             if (Hypot(v1, game.TrackTileSize - v2) < radius) return true;
             if (Hypot(game.TrackTileSize - v1, v2) < radius) return true;
-            if (!wallTile.ContainsKey(myTile.tile)) return true;
-            Direction[] dirs = wallTile[myTile.tile];
-
+           // if (!wallTile.ContainsKey(myTile.tile)) return true;
+          //  Direction[] dirs = wallTile[myTile.tile];
+            /*
             foreach (Direction dir in dirs) {
                 if (dir == Direction.Up) if (v2 < radius) return true;
                 if (dir == Direction.Down) if (v2 > radius) return true;
                 if (dir == Direction.Right) if (v1 < radius) return true;
                 if (dir == Direction.Left) if (v1 > radius) return true;
             }
-
+*/
             return false;
         }
 
