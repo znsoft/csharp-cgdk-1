@@ -307,6 +307,11 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
            
         }
 
+        void CalculateSpeedAndAngle() {
+
+
+        }
+
         private void CorrectCenterPoint(ref double nextWaypointX, ref double nextWaypointY)
         {
             double cornerTileOffset = CORNERCORRECTION * game.TrackTileSize;
