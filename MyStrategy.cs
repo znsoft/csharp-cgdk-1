@@ -19,7 +19,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         const double FORWARDWALLDETECT = 15.0D;
         const double LINESTEP = 15.0D;
         const double BREAKTRESHHOLD = 3900.0D;
-        const double FORECASTMUL = 3.0D;
+        const double FORECASTMUL = 13.0D;
 
         enum MovingState
         {
@@ -63,10 +63,12 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         public void Move(Car self, World world, Game game, Move move)
         {
             //Console.WriteLine(self.AngularSpeed.ToString());
-            myFuturePos = new Vector2(self.X + self.SpeedX * FORECASTMUL, self.Y + self.SpeedY * FORECASTMUL);
-            move.EnginePower = maxSpeed;// (0.95D);
             Construct(self, world, game, move);
             AnalyzeCurrentSpeedAndState();
+            double forecast = CalculateForecast();
+            myFuturePos = new Vector2(self.X + self.SpeedX * forecast, self.Y + self.SpeedY * forecast);
+            move.EnginePower = maxSpeed;// (0.95D);
+
             MyWay way = FindOptimalWay(myFuturePos.x, myFuturePos.y, self.NextWaypointX, self.NextWaypointY);
             double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
             if(errorCount<maxErrorCount)PreCalcNextWayPoint(self, world, game, move, ref way, distance);
@@ -80,7 +82,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             }
             angleToWaypoint = GetAngleFromTo(myFuturePos.x, myFuturePos.y , self.Angle, way.target.x, way.target.y);
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
-            angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
+            angleToWaypoint = self.GetAngleTo(way.target.x, way.target.y);
             if (speedModule * speedModule * speedModule * Math.Abs(angleToWaypoint) > BREAKTRESHHOLD || speedModule * Math.Abs(angleAfter3Cells)>40)
             {
                 move.IsBrake = true;
@@ -91,6 +93,38 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             OilFireEnemy(move);
 
         }
+
+        private double CalculateForecast()
+        {double m,maxForecast = self.Mass/133;
+            for (m = 1; m <= maxForecast; m += 1.0D) {
+                var testCoord = new Vector2(self.X + self.SpeedX * m, self.Y + self.SpeedY * m);
+                if (IsWallForecastDetect(testCoord)) return m;
+
+            }
+            return maxForecast;
+        }
+
+        private bool IsWallForecastDetect(Vector2 testCoord)
+        {
+            double radius = self.Width / 2 + game.TrackTileMargin;
+            if (Hypot(testCoord.x, testCoord.y) < radius) return true;
+            if (Hypot(game.TrackTileSize - testCoord.x, game.TrackTileSize - testCoord.y) < radius) return true;
+            if (Hypot(testCoord.x, game.TrackTileSize - testCoord.y) < radius) return true;
+            if (Hypot(game.TrackTileSize - testCoord.x, testCoord.y) < radius) return true;
+            TileType myTile = world.TilesXY[Transform(testCoord.x)][Transform(testCoord.y)];
+            if (!wallTile.ContainsKey(myTile)) return true;
+              Direction[] dirs = wallTile[myTile];
+            
+            foreach (Direction dir in dirs) {
+                if (dir == Direction.Up) if (testCoord.y < radius) return true;
+                if (dir == Direction.Down) if (testCoord.y > radius) return true;
+                if (dir == Direction.Right) if (testCoord.x < radius) return true;
+                if (dir == Direction.Left) if (testCoord.x > radius) return true;
+            }
+
+            return false;
+        
+    }
 
         public double GetAngleFromTo(double x, double y, double fromAngle, double x1, double y1)
         {
@@ -644,6 +678,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             this.world = world;
             this.move = move;
             this.game = game;
+            
         }
 
         private Car WhoOnMyFireLine(Func<Car, bool> condition)            
