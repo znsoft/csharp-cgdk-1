@@ -52,6 +52,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         double maxSpeed = 1.0D;
         double minSpeed = 0.4D;
         bool isInWall = false;
+        MyWay way3;
         //int errorBlockCount = 0; //если столкнулись со стеной то несколько блоков едем "осторожно" без предсказаний
 
         public MyStrategy()
@@ -68,21 +69,23 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             Construct(self, world, game, move);
             AnalyzeCurrentSpeedAndState();
             double forecast = CalculateForecast();
-            double ang = self.AngularSpeed * speedModule;
+            double ang = self.AngularSpeed * speedModule* 0.2D;
             myFuturePos = new Vector2(self.X + speedModule * Math.Cos(ang) + self.SpeedX * speedModule * self.Mass/ MASSDIV, self.Y+ speedModule * Math.Sin(ang) + self.SpeedY * speedModule * self.Mass / MASSDIV);
             isInWall = IsInWall(myFuturePos);
             move.EnginePower = maxSpeed;// (0.95D);
             MyWay way = FindOptimalWay(myFuturePos.x, myFuturePos.y, self.NextWaypointX, self.NextWaypointY);
             double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
-          //  if(errorCount<maxErrorCount)PreCalcNextWayPoint(self, world, game, move, ref way, distance);
-            if (speedModule * speedModule * Math.Abs(angleToWaypoint) > 2.5D * 2.5D * Math.PI&&errorCount>=maxErrorCount) {
+            if (distance > 6 * game.TrackTileSize) move.IsUseNitro = true;
+            if(errorCount<maxErrorCount)PreCalcNextWayPoint(self, world, game, move, ref way, distance);
+            if (speedModule * Math.Abs( angleAfter3Cells) > 240) {
                 move.IsBrake = true;
+
             }
             if (isInWall)
             {
-                Console.WriteLine(speedModule);
+                Console.WriteLine(speedModule );
                 move.IsBrake = true;
-                move.EnginePower = minSpeed;
+                move.EnginePower = -maxSpeed;
 
             }
 
@@ -426,7 +429,11 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 thruCurrentWay |= (myWay[i].x == self.NextWaypointX && myWay[i].y == self.NextWaypointY);
             if (!thruCurrentWay) return null;//отсекаем этот путь 
 
-            if (lenCount > 3)   angleAfter3Cells = self.GetAngleTo(myWay[3].target.x, myWay[3].target.y);//острота угла поворота
+            if (lenCount > 3)
+            {
+                way3 = myWay[3];
+                  angleAfter3Cells = self.GetAngleTo(myWay[3].target.x, myWay[3].target.y);//острота угла поворота
+            }
 
 
             if (errorCount < maxErrorCount)
@@ -734,7 +741,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             /*   getSideWasherAngle
             – Returns - Возвращает модуль отклонения направления полёта двух шайб от направления
             кодемобиля.Направление третьей шайбы совпадает с направлением кодемобиля.*/
-            return enemy.Durability > 0.0D && !enemy.IsFinishedTrack && !enemy.IsTeammate && Math.Abs(self.GetAngleTo(fEnemy.x, fEnemy.y)) < game.SideWasherAngle/3 && Math.Abs(self.GetAngleTo(enemy)) < 0.3;
+            return enemy.Durability > 0.0D && !enemy.IsFinishedTrack && !enemy.IsTeammate && Math.Abs(self.GetAngleTo(fEnemy.x, fEnemy.y)) < game.SideWasherAngle/4 && Math.Abs(self.GetAngleTo(enemy)) < 0.2;
                                      
         }
 
