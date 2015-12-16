@@ -364,6 +364,52 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         }
 
 
+        private bool IsWallForecastDetect(Vector2 testCoord)
+        {
+            double radius = self.Width / 2 + game.TrackTileMargin;
+            double x = TransormToCellCoord(testCoord.x);
+            double y = TransormToCellCoord(testCoord.y);
+            if (Hypot(x, y) < radius) return true;
+            if (Hypot(game.TrackTileSize - x, game.TrackTileSize - y) < radius) return true;
+            if (Hypot(x, game.TrackTileSize - y) < radius) return true;
+            if (Hypot(game.TrackTileSize - x, y) < radius) return true;
+            TileType myTile = world.TilesXY[Transform(testCoord.x)][Transform(testCoord.y)];
+            if (!wallTile.ContainsKey(myTile)) return true;
+            Direction[] dirs = wallTile[myTile];
+
+            foreach (Direction dir in dirs)
+            {
+                if (dir == Direction.Up) if (y < radius) return true;
+                if (dir == Direction.Down) if (y > radius) return true;
+                if (dir == Direction.Right) if (x < radius) return true;
+                if (dir == Direction.Left) if (x > radius) return true;
+            }
+
+            return false;
+
+        }
+
+        private bool CoordsInEdgeRadius(double v1, double v2, double radius, WaveMapCell myTile)
+        {
+            if (Hypot(v1, v2) < radius) return true;
+            if (Hypot(game.TrackTileSize - v1, game.TrackTileSize - v2) < radius) return true;
+            if (Hypot(v1, game.TrackTileSize - v2) < radius) return true;
+            if (Hypot(game.TrackTileSize - v1, v2) < radius) return true;
+            TileType myTile = world.TilesXY[Transform(v1)%world.TilesXY.Length][Transform(testCoord.y)];
+
+            if (!wallTile.ContainsKey(myTile.tile)) return true;
+            Direction[] dirs = wallTile[myTile.tile];
+
+            foreach (Direction dir in dirs)
+            {
+                if (dir == Direction.Up) if (v2 < radius) return true;
+                if (dir == Direction.Down) if (v2 > radius) return true;
+                if (dir == Direction.Right) if (v1 < radius) return true;
+                if (dir == Direction.Left) if (v1 > radius) return true;
+            }
+
+            return false;
+        }
 
         private bool IsNearWallsEdge(double x, double y)
         {
