@@ -61,7 +61,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             PreCalcNextWayPoint(self, world, game, move, ref way, distance);
             double angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
-
+            way = GenerateNewWay( way);
             if (speedModule * speedModule * speedModule * Math.Abs(angleToWaypoint) > BREAKTRESHHOLD)
             {
                 move.IsBrake = true;
@@ -173,13 +173,16 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         private void PreCalcNextWayPoint(Car self, World world, Game game, Move move, ref MyWay way, double distance)
         {
-            if (distance < (game.TrackTileSize + speedModule * PRE_TURN_SPEEDMUL))//800*1250*32/
+
+
+            if (self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY)) < (game.TrackTileSize + speedModule * PRE_TURN_SPEEDMUL))//800*1250*32/
             {
                 int nextWayPointIndex = self.NextWaypointIndex;
                 nextWayPointIndex = (nextWayPointIndex + 1) % world.Waypoints.Length;
                 int nwx = world.Waypoints[nextWayPointIndex][0];
                 int nwy = world.Waypoints[nextWayPointIndex][1];
-                way = FindWay(self.X, self.Y, nwx, nwy);
+                MyWay tempWay = FindWay(self.X, self.Y, nwx, nwy);
+                if (tempWay != null) way = tempWay;
 
             }
         }
@@ -271,29 +274,160 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             }
         }
 
-        private void DebugMap()
+        public double GetAngleFromTo(double x, double y, double fromAngle, double x1, double y1)
         {
-            for (int x = 0; x < world.TilesXY.Length; x++)
+            double absoluteAngleTo = Math.Atan2(y1 - y, x1 - x);
+            double relativeAngleTo = absoluteAngleTo - fromAngle;
+
+            while (relativeAngleTo > Math.PI)
             {
-                for (int y = 0; y < world.TilesXY[x].Length; y++)
-                {
-                    Console.Write((int)world.TilesXY[x][y]);
-                }
-                Console.WriteLine(" ");
+                relativeAngleTo -= 2.0D * Math.PI;
+            }
+
+            while (relativeAngleTo < -Math.PI)
+            {
+                relativeAngleTo += 2.0D * Math.PI;
+            }
+
+            return relativeAngleTo;
+        }
+
+
+
+        private MyWay GenerateNewWay( MyWay way)
+        {
+            int wayCount = 5;
+            double[] shift = new double[] { -0.5, 0.5, 0.35, -0.35, 1, 1 };
+            int[] lens = new int[wayCount];
+            MyWay[] ways = new MyWay[wayCount];
+            int max = 0, j;
+
+            for (int i = 0; i < ways.Length; i++)
+            {
+                ways[i] = (new MyWay(way.x, way.y)).CalcTargetCenter(game.TrackTileSize).CorrectCenterPoint(game.TrackTileSize);
+                CorrectInOutWayPoint(ways[i], shift[i]);
+                double d = self.GetDistanceTo(ways[i].target.x, ways[i].target.y);
+                j = GetMoveFwdTicks(ways[i], d > 100 ? 100 : (int)d, move);
+                if (j > max) { max = j; way = ways[i]; }
+            }
+            if (max < 40) move.IsBrake = true;
+            return way;
+        }
+
+        private void CorrectInOutWayPoint(MyWay way, double shift)
+        {
+            if (way.target == null) way.CalcTargetCenter(game.TrackTileSize);
+
+            if (!way.isInDirected && !way.isOutDirected)
+            {
+
+                // way.target.x += game.TrackTileSize / 2 - shift * game.TrackTileSize / 2;
+                // way.target.y += game.TrackTileSize / 2 - shift * game.TrackTileSize / 2;
+                return;
+            }
+            double size = speedModule * PRECALCDIRECTIONOFFSET + game.TrackTileSize / 2;
+
+            double deltaShift = shift * size;
+            Vector2 next = way.target;
+            Vector2 offset = null;
+            if (way.isInDirected) offset = GetInOffset(way.dirIn, next, size - deltaShift);
+            if (offset == null && way.isOutDirected)
+                offset = GetOutOffset(way.dirOut, next, size + deltaShift);
+            if (offset == null) return;
+            way.target.x += offset.x;
+            way.target.y += offset.y;
+        }
+
+        MyWay[] FindPath(double px, double py, int wx, int wy)
+        {
+            CopyMapToWaveMap();
+            int x = Transform(px);
+            int y = Transform(py);
+            myMap[x][y].waveLen = 1;
+
+            int lenCount = FillShortWay( wx, wy);
+            MyWay[] myWay = new MyWay[lenCount];
+            myWay[0] = new MyWay(x, y);
+            myWay[0].target.x = px;
+            myWay[0].target.y = py;
+            myWay[lenCount - 1] = (new MyWay(wx, wy, myMap[wx][wy])).CalcTargetCenter(game.TrackTileSize);
+            for (int i = lenCount - 1; i > 1; i--)
+                myWay[i - 1] = FindAround(i, myWay).CalcTargetCenter(game.TrackTileSize);
+
+            bool thruCurrentWay = false;
+
+            for (int i = lenCount - 1; i >= 1; i--)
+                thruCurrentWay |= (myWay[i].x == self.NextWaypointX && myWay[i].y == self.NextWaypointY);
+            if (!thruCurrentWay) return null;
+
+            return myWay;
+        }
+
+
+
+        private bool IsNearWallsEdge(double x, double y)
+        {
+            int myX = Transform(x);
+            int myY = Transform(y);
+            double cellX = x - DTransoform0(myX);
+            double cellY = y - DTransoform0(myY);
+            double p = game.TrackTileMargin + game.CarWidth / 4;
+            if (OnMyLine(cellX, cellY, 0, 0, x, y, p) ||
+                            OnMyLine(cellX, cellY, game.TrackTileSize, 0, x, y, p) ||
+                            OnMyLine(cellX, cellY, 0, game.TrackTileSize, x, y, p) ||
+                            OnMyLine(cellX, cellY, game.TrackTileSize, game.TrackTileSize, x, y, p))
+            { return true; }
+            return false;
+
+        }
+
+        int GetMoveFwdTicks(MyWay myWay, int maxLenForward, Move move)
+        {
+            double speedx = self.SpeedX;
+            double speedy = self.SpeedY;
+            double speed = Hypot(speedx, speedy);
+            double x = self.X;
+            double y = self.Y;
+            double tx = myWay.target.x;
+            double ty = myWay.target.y;
+            // double angspeed = self.AngularSpeed;
+            double angle = self.Angle;
+            double wheelTurn = move.WheelTurn;
+            double enginePower = move.EnginePower;
+            for (int i = 0; i < maxLenForward; i++)
+            {
+
+                y += speedy; x += speedx;
+                int myX = Transform(x);
+                int myY = Transform(y);
+                double cellX = x - DTransoform0(myX);
+                double cellY = y - DTransoform0(myY);
+                double p = game.TrackTileMargin + game.CarWidth / 4;
+                if (CoordsInEdgeRadius(cellX, cellY, p)) return i;
+
+                speed = Hypot(speedx, speedy);
+                double speedAngle = Math.Atan2(speedy, speedx);
+
+                if (enginePower < 0.01 && enginePower > -0.01) speed -= speed > 0 ? game.CarEnginePowerChangePerTick : 0;
+                if (speed < 33 && enginePower > 0) speed += game.CarEnginePowerChangePerTick;
+                if (speed > 0 && enginePower < 0) speed -= game.CarEnginePowerChangePerTick;
+                wheelTurn = GetAngleFromTo(x, y, speedAngle, tx, ty);
+
+                if (wheelTurn > 0.005)
+                    speedAngle += game.CarWheelTurnChangePerTick;
+
+                if (wheelTurn < -0.005)
+                    speedAngle -= game.CarWheelTurnChangePerTick;
+
+                speedx = Math.Cos(speedAngle) * speed;
+                speedy = Math.Sin(speedAngle) * speed;
+
+
 
             }
-            Console.WriteLine("-------");
 
-            for (int x = 0; x < world.Waypoints.Length; x++)
-            {
-                for (int y = 0; y < world.Waypoints[x].Length; y++)
-                {
-                    Console.Write((int)world.Waypoints[x][y]); Console.Write(" ");
-                }
-                Console.WriteLine(" ");
+            return maxLenForward;
 
-            }
-            //DebugNextWay();
         }
 
 
@@ -334,6 +468,13 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 myWay[i - 1] = FindAround(i, myWay).CalcTargetCenter(game.TrackTileSize);
                 CorrectInOutWayPoint(myWay[i-1]);
             }
+
+            bool thruCurrentWay = false;
+
+            for (int i = lenCount - 1; i >= 1; i--)
+                thruCurrentWay |= (myWay[i].x == self.NextWaypointX && myWay[i].y == self.NextWaypointY);
+            if (!thruCurrentWay) return null;
+
             CorrectInOutWayPoint(myWay[lenCount - 1]);
             bool isNearWall = IsNearWallsEdges(FORWARDWALLDETECT);
             if (!isNearWall)
@@ -397,6 +538,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return CoordsInEdgeRadius(v1, v2, game.CarWidth+game.TrackTileSize / 10);
         }
 
+
         private bool CoordsInEdgeRadius(double v1, double v2, double radius)
         {
             if (Hypot(v1, v2) < radius) return true;
@@ -406,13 +548,11 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return false;
         }
 
+
         MyWay FindAround(int i, MyWay[] tempWay)//i-- 
         {
             int x = tempWay[i].x;
             int y = tempWay[i].y;
-            //bug необходимо учитывать тип тайла иначе может возникнуть ситуация 
-            //    123 - от этой двойки никак не пробраться к нижней тройке
-            //    23
             Direction[] dir = new Direction[] { };
 
             WaveMapCell thisTile = tempWay[i].waveTile;
@@ -420,9 +560,10 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 dir = fromTile[thisTile.tile];
 
             MyWay myWay = DirectionsContainsWave(i, x, y, dir);
+
+
             tempWay[i].dirIn = myWay.dirOut;
             tempWay[i].isInDirected = true;
-            //if(x==x1&&y==y1)//баг если к этой точке придут 2 пути одинаковой длины то алгоритм зависнет
             WaveMapCell myTile = new WaveMapCell();
             WaveAt(myWay.x, myWay.y, myTile);
             myWay.waveTile = myTile;
@@ -431,15 +572,24 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         private MyWay DirectionsContainsWave(int i, int x, int y, Direction[] dir)
         {
+            double ts = game.TrackTileSize;
             MyWay myWay = new MyWay(x, y);
-            myWay.isOutDirected = true;
-            if (dir.Contains(Direction.Right) && isNextWaveAt(x + 1, y, i)) { myWay.x = x + 1; myWay.dirOut = Direction.Left; return myWay; }
-            if (dir.Contains(Direction.Left) && isNextWaveAt(x - 1, y, i)) { myWay.x = x - 1; myWay.dirOut = Direction.Right; return myWay; }
-            if (dir.Contains(Direction.Down) && isNextWaveAt(x, y + 1, i)) { myWay.y = y + 1; myWay.dirOut = Direction.Up; return myWay; }
-            if (dir.Contains(Direction.Up) && isNextWaveAt(x, y - 1, i)) { myWay.y = y - 1; myWay.dirOut = Direction.Down; return myWay; }
-            myWay.isOutDirected = false;
-            return myWay;
+            if (dir.Contains(Direction.Right) && isNextWaveAt(x + 1, y, i)) { MyWay otherWay = new MyWay(x + 1, y); otherWay.dirOut = Direction.Left; myWay.otherWays.Add(otherWay.CalcTargetCenter(ts)); }
+            if (dir.Contains(Direction.Left) && isNextWaveAt(x - 1, y, i)) { MyWay otherWay = new MyWay(x - 1, y); otherWay.dirOut = Direction.Right; myWay.otherWays.Add(otherWay.CalcTargetCenter(ts)); }
+            if (dir.Contains(Direction.Down) && isNextWaveAt(x, y + 1, i)) { MyWay otherWay = new MyWay(x, y + 1); otherWay.dirOut = Direction.Up; myWay.otherWays.Add(otherWay.CalcTargetCenter(ts)); }
+            if (dir.Contains(Direction.Up) && isNextWaveAt(x, y - 1, i)) { MyWay otherWay = new MyWay(x, y - 1); otherWay.dirOut = Direction.Down; myWay.otherWays.Add(otherWay.CalcTargetCenter(ts)); }
+            double minAngle = 100;
+            MyWay minWay = myWay;
+            //var bestWay = from MyWay way in myWay.otherWays where 
+            foreach (MyWay way in myWay.otherWays)
+            {
+                double angle = Math.Abs(self.GetAngleTo(way.target.x, way.target.y));
+                if (angle < minAngle) { minWay = way; minAngle = angle; minWay.isOutDirected = true; }
+            }
+
+            return minWay;
         }
+
 
         private bool isNextWaveAt(int x, int y, int i)
         {
@@ -463,12 +613,12 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         }
 
 
-        private int FillShortWay(int nextWaypointX, int nextWaypointY)
+        private int FillShortWay( int nextWaypointX, int nextWaypointY)
         {
             int shortLen;
             for (int i = MAXWAYITERATIONS; i >= 0; i--)
             {
-                shortLen = FillOneWave(nextWaypointX, nextWaypointY);
+                shortLen = FillOneWave( nextWaypointX,  nextWaypointY);
                 if (shortLen > 0) return shortLen;
             }
             return 0;
@@ -479,6 +629,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             fromTile.Add(TileType.Vertical, new Direction[] { Direction.Down, Direction.Up });
             fromTile.Add(TileType.Horizontal, new Direction[] { Direction.Left, Direction.Right });
             fromTile.Add(TileType.Crossroads, new Direction[] { Direction.Left, Direction.Right, Direction.Down, Direction.Up });
+            fromTile.Add(TileType.Unknown, new Direction[] { Direction.Left, Direction.Right, Direction.Down, Direction.Up });
             fromTile.Add(TileType.BottomHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Down });
             fromTile.Add(TileType.LeftBottomCorner, new Direction[] { Direction.Right, Direction.Up });
             fromTile.Add(TileType.LeftHeadedT, new Direction[] { Direction.Left, Direction.Up, Direction.Down });
@@ -489,7 +640,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             fromTile.Add(TileType.TopHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Up });
         }
 
-        int FillOneWave(int wx, int wy)
+        int FillOneWave( int wx,  int wy)
         {
             for (int x = 0; x < myMap.Length; x++)
                 for (int y = 0; y < myMap[x].Length; y++)
@@ -499,6 +650,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                     if (myTile.isFillAround) continue;
                     if (myTile.isWall()) continue;
                     if (x == wx && y == wy) return myTile.waveLen;//кратчайший путь до точки найден
+                                                                  // if (myTile.tile == TileType.Unknown) { wx = x; wy = y; return myTile.waveLen; }
                     FillAround(x, y, myTile);
                     myMap[x][y] = myTile;
                 }
@@ -544,6 +696,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return true;
 
         }
+
 
         void CopyMapToWaveMap()
         {
@@ -646,6 +799,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             public bool isInDirected = false;//отвечает за то что dirOut посчитан и заполнен (dirOut перечисление и не может быть null)
             public bool isOutDirected = false;
             public Vector2 target;
+            public List<MyWay> otherWays = new List<MyWay>();
 
             public MyWay()
             {
