@@ -318,7 +318,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             ways[0] = way;
 
             int max = 0, j;
-            int ticksForward = 1600;
+            int ticksForward = 900;
             for (int i = 1; i < ways.Length; i++)
             {
                 ways[i] = new MyWay(way.x, way.y);
