@@ -32,6 +32,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
 
         Dictionary<TileType, Direction[]> fromTile = new Dictionary<TileType, Direction[]>();
+        Dictionary<TileType, Direction[]> wallTile = new Dictionary<TileType, Direction[]>();
         TileType[] ForwardDirectionTiles = new TileType[] { TileType.Horizontal, TileType.Vertical };
 
         Car self;
@@ -47,6 +48,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         public MyStrategy()
         {
             FillFromTileTable();
+            FillWallTileTable();
         }
 
 
@@ -66,6 +68,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             {
                 move.IsBrake = true;
             }
+             if (self.GetDistanceTo(way.target.x, way.target.y) > game.TrackTileSize * 4 && angleToWaypoint < 1) move.IsUseNitro = true;
 
             BackMove(move);
             FireinEnemy(move);
@@ -296,47 +299,45 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         private MyWay GenerateNewWay( MyWay way)
         {
-            int wayCount = 5;
-            double[] shift = new double[] { -0.5, 0.5, 0.35, -0.35, 1, 1 };
+            int wayCount = 10;
+            Vector2[] shift = new Vector2[] {
+                new Vector2(1, 1),
+                new Vector2(-0.5, 0.5),
+                new Vector2(0.5, -0.5),
+                new Vector2(-0.5, -0.5),
+                new Vector2(0.5, 0.5),
+                new Vector2(1, 1),
+                new Vector2(-1, -1),
+                new Vector2(-1, 1),
+                new Vector2(1, -1),
+                new Vector2(0, 0)
+
+            };
             int[] lens = new int[wayCount];
             MyWay[] ways = new MyWay[wayCount];
-            int max = 0, j;
+            ways[0] = way;
 
-            for (int i = 0; i < ways.Length; i++)
+            int max = 0, j;
+            int ticksForward = 1600;
+            for (int i = 1; i < ways.Length; i++)
             {
-                ways[i] = (new MyWay(way.x, way.y)).CalcTargetCenter(game.TrackTileSize).CorrectCenterPoint(game.TrackTileSize);
-                CorrectInOutWayPoint(ways[i], shift[i]);
+                ways[i] = new MyWay(way.x, way.y);
+                double xs = shift[i].x;
+                double ys = shift[i].y;
+                xs *= game.TrackTileSize / 2;
+                ys *= game.TrackTileSize / 2;
+                ways[i].target = new Vector2(ways[i].GetCenterX(game.TrackTileSize)+xs, ways[i].GetCenterY(game.TrackTileSize)+ys);
+            }
+                for (int i = 0; i < ways.Length; i++)
+            {
                 double d = self.GetDistanceTo(ways[i].target.x, ways[i].target.y);
-                j = GetMoveFwdTicks(ways[i], d > 800 ? 800 : (int)d, move);
+                j = GetMoveFwdTicks(ways[i], d > ticksForward ? ticksForward : (int)d, move);
                 if (j > max) { max = j; way = ways[i]; }
             }
-            if (max < 70) { move.IsBrake = true; Console.WriteLine(max); }
+            if (max < 60 && speedModule > 13)  move.IsBrake = true;// Console.WriteLine(max); }
             return way;
         }
 
-        private void CorrectInOutWayPoint(MyWay way, double shift)
-        {
-            if (way.target == null) way.CalcTargetCenter(game.TrackTileSize);
-
-            if (!way.isInDirected && !way.isOutDirected)
-            {
-
-                 way.target.x +=  shift * game.TrackTileMargin;
-                 way.target.y +=  shift * game.TrackTileMargin;
-                return;
-            }
-            double size = speedModule * PRECALCDIRECTIONOFFSET + game.TrackTileSize / 2;
-
-            double deltaShift = shift * size;
-            Vector2 next = way.target;
-            Vector2 offset = null;
-            if (way.isInDirected) offset = GetInOffset(way.dirIn, next, size - deltaShift);
-            if (offset == null && way.isOutDirected)
-                offset = GetOutOffset(way.dirOut, next, size + deltaShift);
-            if (offset == null) return;
-            way.target.x += offset.x;
-            way.target.y += offset.y;
-        }
 
         MyWay[] FindPath(double px, double py, int wx, int wy)
         {
@@ -366,7 +367,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         private bool IsWallForecastDetect(Vector2 testCoord)
         {
-            double radius = self.Width / 2 + game.TrackTileMargin;
+            double radius = self.Width / 2 + game.TrackTileMargin - 20;
             double x = TransormToCellCoord(testCoord.x);
             double y = TransormToCellCoord(testCoord.y);
             if (Hypot(x, y) < radius) return true;
@@ -380,36 +381,16 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             foreach (Direction dir in dirs)
             {
                 if (dir == Direction.Up) if (y < radius) return true;
-                if (dir == Direction.Down) if (y > radius) return true;
-                if (dir == Direction.Right) if (x < radius) return true;
-                if (dir == Direction.Left) if (x > radius) return true;
+                if (dir == Direction.Down) if (y > game.TrackTileSize - radius) return true;
+                if (dir == Direction.Right) if (x > game.TrackTileSize - radius) return true;
+                if (dir == Direction.Left) if (x < radius) return true;
             }
 
             return false;
 
         }
 
-        private bool CoordsInEdgeRadius(double v1, double v2, double radius, WaveMapCell myTile)
-        {
-            if (Hypot(v1, v2) < radius) return true;
-            if (Hypot(game.TrackTileSize - v1, game.TrackTileSize - v2) < radius) return true;
-            if (Hypot(v1, game.TrackTileSize - v2) < radius) return true;
-            if (Hypot(game.TrackTileSize - v1, v2) < radius) return true;
-            TileType myTile = world.TilesXY[Transform(v1)%world.TilesXY.Length][Transform(testCoord.y)];
 
-            if (!wallTile.ContainsKey(myTile.tile)) return true;
-            Direction[] dirs = wallTile[myTile.tile];
-
-            foreach (Direction dir in dirs)
-            {
-                if (dir == Direction.Up) if (v2 < radius) return true;
-                if (dir == Direction.Down) if (v2 > radius) return true;
-                if (dir == Direction.Right) if (v1 < radius) return true;
-                if (dir == Direction.Left) if (v1 > radius) return true;
-            }
-
-            return false;
-        }
 
         private bool IsNearWallsEdge(double x, double y)
         {
@@ -444,12 +425,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             {
 
                 y += speedy; x += speedx;
-                int myX = Transform(x);
-                int myY = Transform(y);
-                double cellX = x - DTransoform0(myX);
-                double cellY = y - DTransoform0(myY);
-                double p = game.TrackTileMargin + game.CarWidth / 2;
-                if (CoordsInEdgeRadius(cellX, cellY, p)) return i;
+                if (IsWallForecastDetect(new Vector2(x,y))) return i;
 
                 speed = Hypot(speedx, speedy);
                 double speedAngle = Math.Atan2(speedy, speedx);
@@ -670,21 +646,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return 0;
         }
 
-        private void FillFromTileTable()
-        {
-            fromTile.Add(TileType.Vertical, new Direction[] { Direction.Down, Direction.Up });
-            fromTile.Add(TileType.Horizontal, new Direction[] { Direction.Left, Direction.Right });
-            fromTile.Add(TileType.Crossroads, new Direction[] { Direction.Left, Direction.Right, Direction.Down, Direction.Up });
-            fromTile.Add(TileType.Unknown, new Direction[] { Direction.Left, Direction.Right, Direction.Down, Direction.Up });
-            fromTile.Add(TileType.BottomHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Down });
-            fromTile.Add(TileType.LeftBottomCorner, new Direction[] { Direction.Right, Direction.Up });
-            fromTile.Add(TileType.LeftHeadedT, new Direction[] { Direction.Left, Direction.Up, Direction.Down });
-            fromTile.Add(TileType.LeftTopCorner, new Direction[] { Direction.Right, Direction.Down });
-            fromTile.Add(TileType.RightBottomCorner, new Direction[] { Direction.Left, Direction.Up });
-            fromTile.Add(TileType.RightHeadedT, new Direction[] { Direction.Right, Direction.Down, Direction.Up });
-            fromTile.Add(TileType.RightTopCorner, new Direction[] { Direction.Left, Direction.Down });
-            fromTile.Add(TileType.TopHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Up });
-        }
+
 
         int FillOneWave( int wx,  int wy)
         {
@@ -834,7 +796,38 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         int Transform(double x) { return (int)((x) / game.TrackTileSize); }
         double InvTransoform(int x) { return (double)(x + 0.5D) * game.TrackTileSize; }
         double DTransoform0(int x) { return (double)(x) * game.TrackTileSize; }
+        double TransormToCellCoord(double x) { int myX = Transform(x); return x - DTransoform0(myX); }
+        private void FillWallTileTable()
+        {
+            wallTile.Add(TileType.Vertical, new Direction[] { Direction.Right, Direction.Left });
+            wallTile.Add(TileType.Horizontal, new Direction[] { Direction.Up, Direction.Down });
+            wallTile.Add(TileType.Crossroads, new Direction[] { });
+            wallTile.Add(TileType.Unknown, new Direction[] { });
+            wallTile.Add(TileType.BottomHeadedT, new Direction[] { Direction.Up });
+            wallTile.Add(TileType.LeftBottomCorner, new Direction[] { Direction.Left, Direction.Down });
+            wallTile.Add(TileType.LeftHeadedT, new Direction[] { Direction.Right });
+            wallTile.Add(TileType.LeftTopCorner, new Direction[] { Direction.Left, Direction.Up });
+            wallTile.Add(TileType.RightBottomCorner, new Direction[] { Direction.Right, Direction.Down });
+            wallTile.Add(TileType.RightHeadedT, new Direction[] { Direction.Left });
+            wallTile.Add(TileType.RightTopCorner, new Direction[] { Direction.Right, Direction.Up });
+            wallTile.Add(TileType.TopHeadedT, new Direction[] { Direction.Down });
 
+        }
+        private void FillFromTileTable()
+        {
+            fromTile.Add(TileType.Vertical, new Direction[] { Direction.Down, Direction.Up });
+            fromTile.Add(TileType.Horizontal, new Direction[] { Direction.Left, Direction.Right });
+            fromTile.Add(TileType.Crossroads, new Direction[] { Direction.Left, Direction.Right, Direction.Down, Direction.Up });
+            fromTile.Add(TileType.Unknown, new Direction[] { Direction.Left, Direction.Right, Direction.Down, Direction.Up });
+            fromTile.Add(TileType.BottomHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Down });
+            fromTile.Add(TileType.LeftBottomCorner, new Direction[] { Direction.Right, Direction.Up });
+            fromTile.Add(TileType.LeftHeadedT, new Direction[] { Direction.Left, Direction.Up, Direction.Down });
+            fromTile.Add(TileType.LeftTopCorner, new Direction[] { Direction.Right, Direction.Down });
+            fromTile.Add(TileType.RightBottomCorner, new Direction[] { Direction.Left, Direction.Up });
+            fromTile.Add(TileType.RightHeadedT, new Direction[] { Direction.Right, Direction.Down, Direction.Up });
+            fromTile.Add(TileType.RightTopCorner, new Direction[] { Direction.Left, Direction.Down });
+            fromTile.Add(TileType.TopHeadedT, new Direction[] { Direction.Left, Direction.Right, Direction.Up });
+        }
 
         class MyWay
         {
