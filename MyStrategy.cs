@@ -12,7 +12,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         const double MINSPEED = 0.09D;
         const int MAXBACKTICKS = 300;
         const double PRECALCDIRECTIONOFFSET = 23;
-        const int MAXWAYITERATIONS = 20;//максимально возможная длина пути (ограничить проц время)
+        const int MAXWAYITERATIONS = 220;//максимально возможная длина пути (ограничить проц время)
         const int MAXERRORBLOCKS = 8;
         const double PRE_TURN_SPEEDMUL = 15.5D;
         const double CORNERCORRECTION = -0.25D;
@@ -307,10 +307,10 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 ways[i] = (new MyWay(way.x, way.y)).CalcTargetCenter(game.TrackTileSize).CorrectCenterPoint(game.TrackTileSize);
                 CorrectInOutWayPoint(ways[i], shift[i]);
                 double d = self.GetDistanceTo(ways[i].target.x, ways[i].target.y);
-                j = GetMoveFwdTicks(ways[i], d > 100 ? 100 : (int)d, move);
+                j = GetMoveFwdTicks(ways[i], d > 800 ? 800 : (int)d, move);
                 if (j > max) { max = j; way = ways[i]; }
             }
-            if (max < 40) move.IsBrake = true;
+            if (max < 70) { move.IsBrake = true; Console.WriteLine(max); }
             return way;
         }
 
@@ -321,8 +321,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             if (!way.isInDirected && !way.isOutDirected)
             {
 
-                // way.target.x += game.TrackTileSize / 2 - shift * game.TrackTileSize / 2;
-                // way.target.y += game.TrackTileSize / 2 - shift * game.TrackTileSize / 2;
+                 way.target.x +=  shift * game.TrackTileMargin;
+                 way.target.y +=  shift * game.TrackTileMargin;
                 return;
             }
             double size = speedModule * PRECALCDIRECTIONOFFSET + game.TrackTileSize / 2;
@@ -402,7 +402,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 int myY = Transform(y);
                 double cellX = x - DTransoform0(myX);
                 double cellY = y - DTransoform0(myY);
-                double p = game.TrackTileMargin + game.CarWidth / 4;
+                double p = game.TrackTileMargin + game.CarWidth / 2;
                 if (CoordsInEdgeRadius(cellX, cellY, p)) return i;
 
                 speed = Hypot(speedx, speedy);
