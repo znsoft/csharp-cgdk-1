@@ -71,12 +71,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             Construct(self, world, game, move);
             AnalyzeCurrentSpeedAndState();
             double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
-            if (way == null || (game.TickCount % 20) == 0 || distance < game.TrackTileSize)
-            {
-                way = FindWay(self.X, self.Y, self.NextWaypointX, self.NextWaypointY);
-                PreCalcNextWayPoint(self, world, game, move, ref way, distance);
-            }
-            way = GenerateNewWay(way);
+                way = GetFwdWay();
 
             double angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
@@ -340,15 +335,28 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return relativeAngleTo;
         }
 
-        void GenerateWayinPath(MyWay[] tWay) {
+
+        MyWay GetFwdWay() {
+            MyWay[] tWay = CalcPathToWayPoints();
+            int i = GenerateWayinPath(tWay);
+            if (i > 0 && i < 4 && speedModule < 10) move.IsBrake = true;
+            if (i > 0) return tWay[i];
+            CorrectInOutWayPoint( tWay[1].CorrectCenterPoint(game.TrackTileSize));
+            return tWay[1];
+        }
+
+
+        int GenerateWayinPath(MyWay[] tWay) {
             int lenCount = tWay.Length;
             //int l = lenCount - 1;
             Vector2 xy = new Vector2(self.X, self.Y);
-            for (int i = lenCount - 1; i > 1; i--)
+            int len, maxLenForward = 16;
+            for (int i = lenCount>8?8:lenCount - 1; i > 1; i--)
             {
-
-               
+                len = SimulateFwdTicks(tWay[i], maxLenForward);
+                if (len > 0) return i;
             }
+            return 0;
         }
 
 
@@ -375,7 +383,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
             int lenCount = FillShortWay( wx, wy);
             MyWay[] myWay = new MyWay[lenCount];
-            myWay[0] = new MyWay(x, y);
+            myWay[0] = (new MyWay(x, y)).CalcTargetCenter(game.TrackTileSize); 
             myWay[0].target.x = px;
             myWay[0].target.y = py;
             myWay[lenCount - 1] = (new MyWay(wx, wy, myMap[wx][wy])).CalcTargetCenter(game.TrackTileSize);
@@ -390,6 +398,62 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
             return myWay;
         }
+
+
+        int SimulateFwdTicks(MyWay myWay, int maxLenForward)
+        {
+            double k = 2;
+            double speedx = self.SpeedX;
+            double speedy = self.SpeedY;
+            double speed = Hypot(speedx, speedy);
+            double x = self.X;
+            double y = self.Y;
+            double tx = myWay.target.x;
+            double ty = myWay.target.y;
+            // double angspeed = self.AngularSpeed;
+            double angle = self.Angle;
+            double wheelTurn = move.WheelTurn;
+            double enginePower = move.EnginePower;
+            bool thruWay = false;
+            for (int i = 0; i < maxLenForward; i++)
+            {
+                VisualizeSendLine(x, y, x + speedx, y + speedy, 1);
+                y += speedy; x += speedx;
+                thruWay |= (Transform(x) == myWay.x && Transform(y) == myWay.y);
+                if (thruWay)
+                {
+                    myWay.target.x = x;
+                    myWay.target.y = y;
+                    return i;
+                }
+                if (IsWallForecastDetect(new Vector2(x, y)))
+                    return 0;
+
+                speed = Hypot(speedx, speedy);
+                double speedAngle = speed < 2 ? angle : Math.Atan2(speedy, speedx);
+
+                //if (enginePower < 0.01 && enginePower > -0.01) speed -= speed > 0 ? game.CarEnginePowerChangePerTick : 0;
+                if (speed < 33 * 2 && enginePower > 0) speed += game.CarEnginePowerChangePerTick * k;
+                //if (speed > 0 && enginePower < 0) speed -= game.CarEnginePowerChangePerTick;
+                wheelTurn = GetAngleFromTo(x, y, speedAngle, tx, ty);
+
+                if (wheelTurn > 0.01)
+                    speedAngle += game.CarWheelTurnChangePerTick * k * 2;
+
+                if (wheelTurn < -0.01)
+                    speedAngle -= game.CarWheelTurnChangePerTick * k * 2;
+
+                speedx = Math.Cos(speedAngle) * speed * k;
+                speedy = Math.Sin(speedAngle) * speed * k;
+
+
+
+            }
+                return 0;
+
+        }
+
+
 
 
         private bool IsWallForecastDetect(Vector2 testCoord)
@@ -418,8 +482,6 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return false;
 
         }
-
-
 
         int GetMoveFwdTicks(MyWay myWay, int maxLenForward, Move move)
         {
