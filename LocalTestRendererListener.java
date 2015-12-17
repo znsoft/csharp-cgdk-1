@@ -30,7 +30,9 @@ public final class LocalTestRendererListener {
     private BufferedReader in;
     private PrintWriter out;
     ServerSocket listener = null;
-    ArrayList<LinePoints> linePoints = new ArrayList<LinePoints>();
+    public boolean isLocked; 
+    //LinkedList<Object>
+            ArrayList<LinePoints> linePoints = new ArrayList<LinePoints>();
 
     public void beforeDrawScene(Graphics graphics, World world, Game game, int canvasWidth, int canvasHeight,
             double left, double top, double width, double height) {
@@ -51,6 +53,7 @@ public final class LocalTestRendererListener {
 
     public void afterDrawScene(Graphics graphics, World world, Game game, int canvasWidth, int canvasHeight,
             double left, double top, double width, double height) {
+        isLocked = true;
         updateFields(graphics, world, game, canvasWidth, canvasHeight, left, top, width, height);
 
         graphics.setColor(Color.BLACK);
@@ -58,7 +61,7 @@ public final class LocalTestRendererListener {
         drawLine(l.start.getX(), l.start.getY(), l.end.getX(), l.end.getY());
         }
         linePoints.clear();
-        
+        isLocked = false;
     }
 
     private void updateFields(Graphics graphics, World world, Game game, int canvasWidth, int canvasHeight,
@@ -261,7 +264,7 @@ public final class LocalTestRendererListener {
                             for(int i = 0; i< cmds.length;i++){
                             coords[i] = Double.parseDouble(cmds[i]);
                             }
-                             linePoints.add(new LinePoints(coords[0], coords[1], coords[2], coords[3]));
+                            if(!isLocked) linePoints.add(new LinePoints(coords[0], coords[1], coords[2], coords[3]));
                                 
                         }
 

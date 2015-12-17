@@ -11,7 +11,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 {
     public sealed class MyStrategy : IStrategy
     {
-        const int MAXSTOPCOUNT = 30;
+        const int MAXSTOPCOUNT = 12;
         const double MINSPEED = 0.09D;
         const int MAXBACKTICKS = 300;
         const double PRECALCDIRECTIONOFFSET = 23;
@@ -76,16 +76,17 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
                 way = FindWay(self.X, self.Y, self.NextWaypointX, self.NextWaypointY);
                 PreCalcNextWayPoint(self, world, game, move, ref way, distance);
             }
-            double angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
-            move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
             way = GenerateNewWay(way);
 
-            VisualizeSendLine(self.X, self.Y, way.target.x, way.target.y);
+            double angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
+            move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
+
+           // VisualizeSendLine(self.X, self.Y, way.target.x, way.target.y);
             if (speedModule * speedModule * speedModule * Math.Abs(angleToWaypoint) > BREAKTRESHHOLD)
             {
-                move.IsBrake = true;
+              //  move.IsBrake = true;
             }
-             if (self.GetDistanceTo(way.target.x, way.target.y) > game.TrackTileSize * 4 && angleToWaypoint < 1) move.IsUseNitro = true;
+             if (self.GetDistanceTo(way.target.x, way.target.y) > game.TrackTileSize * 4 && angleToWaypoint < 2) move.IsUseNitro = true;
 
             BackMove(move);
             FireinEnemy(move);
@@ -115,8 +116,12 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         void VisualizerWrite(String command) {
             if (writer == null||client == null) return;
-            writer.WriteLine(command);
-            writer.Flush();
+            try
+            {
+                writer.WriteLine(command);
+                writer.Flush();
+            }
+            catch (Exception e) { client = null; }
         }
 
         void VisualizeSendLine(double x, double y, double x1, double y1) {
@@ -196,7 +201,6 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return null;
         }
 
-
         private Vector2 GetInOffset(Direction dir, Vector2 next, double size)
         {
 
@@ -258,7 +262,6 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         }
 
-
         private bool OnMyLine(double px, double py, double x1, double y1, double ex, double ey, double p)
         {
 
@@ -283,13 +286,6 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         {
             return Math.Abs(Math.Cos(self.Angle) * speedModule - self.SpeedX) +
            Math.Abs(Math.Sin(self.Angle) * speedModule - self.SpeedY) < 0.1D;
-        }
-
-
-        private void DebugSpeed(double speedModule)
-        {
-            Console.WriteLine((Math.Cos(self.Angle) * speedModule).ToString() + " " + self.SpeedX.ToString() + " " + (Math.Sin(self.Angle) * speedModule).ToString() + " " + self.SpeedY.ToString());
-
         }
 
         private void FireinEnemy(Move move)
@@ -343,51 +339,30 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             return relativeAngleTo;
         }
 
-
-
-        private MyWay GenerateNewWay( MyWay way)
-        {
-            int wayCount = 10;
-            Vector2[] shift = new Vector2[] {
-                new Vector2(1, 1),
-                new Vector2(-0.5, 0.5),
-                new Vector2(0.5, -0.5),
-                new Vector2(-0.5, -0.5),
-                new Vector2(0.5, 0.5),
-                new Vector2(1, 1),
-                new Vector2(-1, -1),
-                new Vector2(-1, 1),
-                new Vector2(1, -1),
-                new Vector2(0, 0)
-
-            };
-            int[] lens = new int[wayCount];
-            MyWay[] ways = new MyWay[wayCount];
-            ways[0] = way;
-
-            int max = 0, j;
-            int ticksForward = 400;
-            for (int i = 1; i < ways.Length; i++)
+        void GenerateWayinPath(MyWay[] tWay) {
+            int lenCount = tWay.Length;
+            //int l = lenCount - 1;
+            Vector2 xy = new Vector2(self.X, self.Y);
+            for (int i = lenCount - 1; i > 1; i--)
             {
-                ways[i] = new MyWay(way.x, way.y);
-                double xs = shift[i].x;
-                double ys = shift[i].y;
-                xs *= game.TrackTileSize / 2;
-                ys *= game.TrackTileSize / 2;
-                ways[i].target = new Vector2(ways[i].GetCenterX(game.TrackTileSize)+xs, ways[i].GetCenterY(game.TrackTileSize)+ys);
+
+               
             }
-                for (int i = 0; i < ways.Length; i++)
-            {
-                double d = self.GetDistanceTo(ways[i].target.x, ways[i].target.y);
-                j = GetMoveFwdTicks(ways[i], d > ticksForward ? ticksForward : (int)d, move);
-                if (j > max) { max = j; way = ways[i];
-                   // VisualizeSendLine(self.X, self.Y, ways[i].target.x, ways[i].target.y);
-                }
-                
-            }
-            if (max < 60 && speedModule > 13)  move.IsBrake = true;// Console.WriteLine(max); }
-            return way;
         }
+
+
+        MyWay[] CalcPathToWayPoints() {
+
+            int nextWayPointIndex = self.NextWaypointIndex;
+            nextWayPointIndex = (nextWayPointIndex + 1) % world.Waypoints.Length;
+            int nwx = world.Waypoints[nextWayPointIndex][0];
+            int nwy = world.Waypoints[nextWayPointIndex][1];
+            MyWay[] tempWay = FindPath(self.X, self.Y, nwx, nwy);
+            if (tempWay != null)
+                tempWay = FindPath(self.X, self.Y, self.NextWaypointX, self.NextWaypointY);
+            return tempWay;
+        }
+
 
 
         MyWay[] FindPath(double px, double py, int wx, int wy)
@@ -418,14 +393,16 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         private bool IsWallForecastDetect(Vector2 testCoord)
         {
-            double radius = Hypot(self.Width, self.Height) / 3 + game.TrackTileMargin;
+            double radius = Hypot(self.Width, self.Height) / 2 + game.TrackTileMargin ;
             double x = TransormToCellCoord(testCoord.x);
             double y = TransormToCellCoord(testCoord.y);
             if (Hypot(x, y) < radius) return true;
             if (Hypot(game.TrackTileSize - x, game.TrackTileSize - y) < radius) return true;
             if (Hypot(x, game.TrackTileSize - y) < radius) return true;
             if (Hypot(game.TrackTileSize - x, y) < radius) return true;
-            TileType myTile = world.TilesXY[Transform(testCoord.x)][Transform(testCoord.y)];
+            int tx = Transform(testCoord.x) % (world.TilesXY.Length - 1);
+            int ty = Transform(testCoord.y) % (world.TilesXY[tx].Length - 1);
+            TileType myTile = world.TilesXY[tx][ty];
             if (!wallTile.ContainsKey(myTile)) return true;
             Direction[] dirs = wallTile[myTile];
 
@@ -443,23 +420,6 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
 
 
-        private bool IsNearWallsEdge(double x, double y)
-        {
-            int myX = Transform(x);
-            int myY = Transform(y);
-            double cellX = x - DTransoform0(myX);
-            double cellY = y - DTransoform0(myY);
-            double p = game.TrackTileMargin + game.CarWidth / 4;
-            if (OnMyLine(cellX, cellY, 0, 0, x, y, p) ||
-                            OnMyLine(cellX, cellY, game.TrackTileSize, 0, x, y, p) ||
-                            OnMyLine(cellX, cellY, 0, game.TrackTileSize, x, y, p) ||
-                            OnMyLine(cellX, cellY, game.TrackTileSize, game.TrackTileSize, x, y, p))
-            { return true; }
-            return false;
-
-        }
-
-
         int GetMoveFwdTicks(MyWay myWay, int maxLenForward, Move move)
         {
             double k = 2;
@@ -474,58 +434,101 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             double angle = self.Angle;
             double wheelTurn = move.WheelTurn;
             double enginePower = move.EnginePower;
+            bool thruWay = false;
             for (int i = 0; i < maxLenForward; i++)
             {
-
+                VisualizeSendLine(x, y, x + speedx, y+ speedy);
                 y += speedy ; x += speedx;
-                if (IsWallForecastDetect(new Vector2(x,y))) return i;
+                thruWay |= (Transform(x) == myWay.x && Transform(y) == myWay.y);
+                if (thruWay)
+                {
+                    myWay.target.x = x;
+                    myWay.target.y = y;
+                    return i;
+                }
+                if (IsWallForecastDetect(new Vector2(x, y)))
+                {
+
+                    if (thruWay)
+                    {
+                        myWay.target.x = x;
+                        myWay.target.y = y;
+                        return i;
+                    }
+                    return 0;
+                }
 
                 speed = Hypot(speedx, speedy);
-                double speedAngle = Math.Atan2(speedy, speedx);
+                double speedAngle = speed<2? angle:Math.Atan2(speedy, speedx);
 
-                if (enginePower < 0.01 && enginePower > -0.01) speed -= speed > 0 ? game.CarEnginePowerChangePerTick : 0;
-                if (speed < 33 && enginePower > 0) speed += game.CarEnginePowerChangePerTick;
-                if (speed > 0 && enginePower < 0) speed -= game.CarEnginePowerChangePerTick;
+                //if (enginePower < 0.01 && enginePower > -0.01) speed -= speed > 0 ? game.CarEnginePowerChangePerTick : 0;
+                if (speed < 33 * 2 && enginePower > 0) speed += game.CarEnginePowerChangePerTick * k;
+                //if (speed > 0 && enginePower < 0) speed -= game.CarEnginePowerChangePerTick;
                 wheelTurn = GetAngleFromTo(x, y, speedAngle, tx, ty);
 
-                if (wheelTurn > 0.005)
-                    speedAngle += game.CarWheelTurnChangePerTick;
+                if (wheelTurn > 0.01)
+                    speedAngle += game.CarWheelTurnChangePerTick * k * 2;
 
-                if (wheelTurn < -0.005)
-                    speedAngle -= game.CarWheelTurnChangePerTick;
+                if (wheelTurn < -0.01)
+                    speedAngle -= game.CarWheelTurnChangePerTick * k * 2;
 
-                speedx = Math.Cos(speedAngle) * speed;
-                speedy = Math.Sin(speedAngle) * speed;
+                speedx = Math.Cos(speedAngle) * speed * k;
+                speedy = Math.Sin(speedAngle) * speed * k;
 
 
 
             }
-
-            return maxLenForward;
+            if (thruWay) {
+                myWay.target.x = x;
+                myWay.target.y = y;
+                return maxLenForward;
+            }
+            return thruWay ? maxLenForward:0;
 
         }
 
 
-        private void DebugFindMap()
+        private MyWay GenerateNewWay(MyWay way)
         {
-            for (int x = 0; x < myMap.Length; x++)
+            int wayCount = 4;
+            Vector2[] shift = new Vector2[] {
+                new Vector2(1, 1),
+                new Vector2(-1, 1),
+                new Vector2(-1, -1),
+                new Vector2(1, -1),
+                new Vector2(1, 1)
+
+            };
+            int[] lens = new int[wayCount];
+            MyWay[] ways = new MyWay[wayCount];
+            ways[0] = way;
+
+            int max = 0, j;
+            int ticksForward = 16;
+            for (int i = 1; i < ways.Length; i++)
             {
-                for (int y = 0; y < myMap[x].Length; y++)
+                ways[i] = new MyWay(way.x, way.y);
+                double xs = shift[i].x;
+                double ys = shift[i].y;
+                xs *= game.TrackTileSize / 3;
+                ys *= game.TrackTileSize / 3;
+                ways[i].target = new Vector2(ways[i].GetCenterX(game.TrackTileSize) + xs, ways[i].GetCenterY(game.TrackTileSize) + ys);
+            }
+            for (int i = 0; i < ways.Length; i++)
+            {
+                double d = self.GetDistanceTo(ways[i].target.x, ways[i].target.y) / 2;
+                j = GetMoveFwdTicks(ways[i], d > ticksForward ? ticksForward : (int)d, move);
+                if (j > max)
                 {
-                    WaveMapCell myTile = myMap[x][y];
-                    Console.Write(myTile.waveLen);
+                    max = j; way = ways[i];
+                    //VisualizeSendLine(self.X, self.Y, ways[i].target.x, ways[i].target.y);
                 }
-                Console.WriteLine(" ");
 
             }
-            Console.WriteLine("-------");
+            if (max < 8 && speedModule>9 &&IsWallForecastDetect(way.target)) { move.IsBrake = true; Console.WriteLine(max); }
+            return way;
         }
 
-        private void DebugNextWay(int x, int y)
-        {
-            Console.WriteLine(x.ToString() + " " + y.ToString());
-            Console.WriteLine("-------");
-        }
 
         MyWay FindWay(double px, double py, int wx, int wy)
         {
@@ -846,7 +849,9 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
 
         double Hypot(double x, double y) { return Math.Sqrt(x * x + y * y); }
-        int Transform(double x) { return (int)((x) / game.TrackTileSize); }
+        int Transform(double x) {
+            if (x < 0) return 0;
+            return (int)((x) / game.TrackTileSize); }
         double InvTransoform(int x) { return (double)(x + 0.5D) * game.TrackTileSize; }
         double DTransoform0(int x) { return (double)(x) * game.TrackTileSize; }
         double TransormToCellCoord(double x) { int myX = Transform(x); return x - DTransoform0(myX); }
