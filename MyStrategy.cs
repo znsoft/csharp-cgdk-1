@@ -5,7 +5,7 @@ using Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk.Model;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Sockets;
-
+using System.Globalization;
 
 namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 {
@@ -125,7 +125,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         }
 
         void VisualizeSendLine(double x, double y, double x1, double y1, double c) {
-            VisualizerWrite(String.Format("{0:F0},{1:F0},{2:F0},{3:F0},{4:F0}", x, y, x1, y1, c));
+            NumberFormatInfo nfi = CultureInfo.CreateSpecificCulture("en-US").NumberFormat;
+            VisualizerWrite(string.Format("{0:F0},{1:F0},{2:F0},{3:F0},{4}", x, y, x1, y1, c.ToString("N3", nfi)));
 
         }
 
