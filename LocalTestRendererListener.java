@@ -53,15 +53,16 @@ public final class LocalTestRendererListener {
 
     public void afterDrawScene(Graphics graphics, World world, Game game, int canvasWidth, int canvasHeight,
             double left, double top, double width, double height) {
-        isLocked = true;
         updateFields(graphics, world, game, canvasWidth, canvasHeight, left, top, width, height);
-
-        graphics.setColor(Color.BLACK);
+        isLocked = true;
         for (LinePoints l : linePoints ){
+            graphics.setColor(l.c);
         drawLine(l.start.getX(), l.start.getY(), l.end.getX(), l.end.getY());
         }
         linePoints.clear();
         isLocked = false;
+                graphics.setColor(Color.BLACK);
+
     }
 
     private void updateFields(Graphics graphics, World world, Game game, int canvasWidth, int canvasHeight,
@@ -228,8 +229,10 @@ public final class LocalTestRendererListener {
 
         public Point2D start;
         public Point2D end;
+        public Color c;
 
-        LinePoints(double x, double y, double x1, double y1) {
+        LinePoints(double x, double y, double x1, double y1, float c) {
+            this.c = Color.getHSBColor(c, c, c);
             start = new Point2D(x, y);
             end = new Point2D(x1, y1);
         }
@@ -264,7 +267,7 @@ public final class LocalTestRendererListener {
                             for(int i = 0; i< cmds.length;i++){
                             coords[i] = Double.parseDouble(cmds[i]);
                             }
-                            if(!isLocked) linePoints.add(new LinePoints(coords[0], coords[1], coords[2], coords[3]));
+                            if(!isLocked) linePoints.add(new LinePoints(coords[0], coords[1], coords[2], coords[3], (float)coords[4]));
                                 
                         }
 

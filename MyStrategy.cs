@@ -81,7 +81,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             double angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
 
-           // VisualizeSendLine(self.X, self.Y, way.target.x, way.target.y);
+            VisualizeSendLine(self.X, self.Y, way.target.x, way.target.y, 5);
             if (speedModule * speedModule * speedModule * Math.Abs(angleToWaypoint) > BREAKTRESHHOLD)
             {
               //  move.IsBrake = true;
@@ -124,8 +124,8 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             catch (Exception e) { client = null; }
         }
 
-        void VisualizeSendLine(double x, double y, double x1, double y1) {
-            VisualizerWrite(String.Format("{0:F0},{1:F0},{2:F0},{3:F0}", x, y, x1, y1));
+        void VisualizeSendLine(double x, double y, double x1, double y1, double c) {
+            VisualizerWrite(String.Format("{0:F0},{1:F0},{2:F0},{3:F0},{4:F0}", x, y, x1, y1, c));
 
         }
 
@@ -437,7 +437,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             bool thruWay = false;
             for (int i = 0; i < maxLenForward; i++)
             {
-                VisualizeSendLine(x, y, x + speedx, y+ speedy);
+                VisualizeSendLine(x, y, x + speedx, y+ speedy,1);
                 y += speedy ; x += speedx;
                 thruWay |= (Transform(x) == myWay.x && Transform(y) == myWay.y);
                 if (thruWay)
