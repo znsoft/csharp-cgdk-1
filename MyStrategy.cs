@@ -3,6 +3,9 @@ using System.Collections;
 using System.Linq;
 using Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk.Model;
 using System.Collections.Generic;
+using System.IO;
+using System.Net.Sockets;
+
 
 namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 {
@@ -41,10 +44,19 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
         Move move;
         double speedModule;
         private int stopTickCount = 0;
-
+        MyWay way;
         WaveMapCell[][] myMap;
         //int errorBlockCount = 0; //если столкнулись со стеной то несколько блоков едем "осторожно" без предсказаний
+        private TcpClient client = null;
+        //private readonly BinaryReader reader;
+        StreamReader reader;
+        StreamWriter writer;
+        
 
+        //private readonly BinaryWriter writer;
+        private const int BufferSizeBytes = 1 << 20;
+
+        
         public MyStrategy()
         {
             FillFromTileTable();
@@ -54,16 +66,21 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         public void Move(Car self, World world, Game game, Move move)
         {
-
+            connectToVisualizer();
             move.EnginePower = 1.0D;// (0.95D);
             Construct(self, world, game, move);
             AnalyzeCurrentSpeedAndState();
-            MyWay way = FindWay(self.X, self.Y, self.NextWaypointX, self.NextWaypointY);
             double distance = self.GetDistanceTo(InvTransoform(self.NextWaypointX), InvTransoform(self.NextWaypointY));
-            PreCalcNextWayPoint(self, world, game, move, ref way, distance);
+            if (way == null || (game.TickCount % 20) == 0 || distance < game.TrackTileSize)
+            {
+                way = FindWay(self.X, self.Y, self.NextWaypointX, self.NextWaypointY);
+                PreCalcNextWayPoint(self, world, game, move, ref way, distance);
+            }
             double angleToWaypoint = self.GetAngleTo(way.target.x,way.target.y);
             move.WheelTurn = angleToWaypoint * 32.0D / Math.PI;
-            way = GenerateNewWay( way);
+            way = GenerateNewWay(way);
+
+            VisualizeSendLine(self.X, self.Y, way.target.x, way.target.y);
             if (speedModule * speedModule * speedModule * Math.Abs(angleToWaypoint) > BREAKTRESHHOLD)
             {
                 move.IsBrake = true;
@@ -73,6 +90,37 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             BackMove(move);
             FireinEnemy(move);
             OilFireEnemy(move);
+
+        }
+
+
+        void connectToVisualizer()
+        {
+            try
+            {
+                if (client != null) return;
+                client = new TcpClient("127.0.0.1", 8901)
+                {
+                    SendBufferSize = BufferSizeBytes,
+                    ReceiveBufferSize = BufferSizeBytes,
+                    NoDelay = true
+                };
+
+                reader = new StreamReader(client.GetStream());
+                writer = new StreamWriter(client.GetStream());
+            }
+            catch (Exception e) { client = null; }
+
+        }
+
+        void VisualizerWrite(String command) {
+            if (writer == null||client == null) return;
+            writer.WriteLine(command);
+            writer.Flush();
+        }
+
+        void VisualizeSendLine(double x, double y, double x1, double y1) {
+            VisualizerWrite(String.Format("{0:F0},{1:F0},{2:F0},{3:F0}", x, y, x1, y1));
 
         }
 
@@ -318,7 +366,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             ways[0] = way;
 
             int max = 0, j;
-            int ticksForward = 900;
+            int ticksForward = 400;
             for (int i = 1; i < ways.Length; i++)
             {
                 ways[i] = new MyWay(way.x, way.y);
@@ -332,7 +380,10 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             {
                 double d = self.GetDistanceTo(ways[i].target.x, ways[i].target.y);
                 j = GetMoveFwdTicks(ways[i], d > ticksForward ? ticksForward : (int)d, move);
-                if (j > max) { max = j; way = ways[i]; }
+                if (j > max) { max = j; way = ways[i];
+                   // VisualizeSendLine(self.X, self.Y, ways[i].target.x, ways[i].target.y);
+                }
+                
             }
             if (max < 60 && speedModule > 13)  move.IsBrake = true;// Console.WriteLine(max); }
             return way;
@@ -367,7 +418,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         private bool IsWallForecastDetect(Vector2 testCoord)
         {
-            double radius = self.Width / 2 + game.TrackTileMargin - 20;
+            double radius = Hypot(self.Width, self.Height) / 3 + game.TrackTileMargin;
             double x = TransormToCellCoord(testCoord.x);
             double y = TransormToCellCoord(testCoord.y);
             if (Hypot(x, y) < radius) return true;
@@ -408,8 +459,10 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
 
         }
 
+
         int GetMoveFwdTicks(MyWay myWay, int maxLenForward, Move move)
         {
+            double k = 2;
             double speedx = self.SpeedX;
             double speedy = self.SpeedY;
             double speed = Hypot(speedx, speedy);
@@ -424,7 +477,7 @@ namespace Com.CodeGame.CodeRacing2015.DevKit.CSharpCgdk
             for (int i = 0; i < maxLenForward; i++)
             {
 
-                y += speedy; x += speedx;
+                y += speedy ; x += speedx;
                 if (IsWallForecastDetect(new Vector2(x,y))) return i;
 
                 speed = Hypot(speedx, speedy);
